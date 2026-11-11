@@ -1,0 +1,42 @@
+<div class="st-vibe-composer-settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>MIDI Vibe Composer</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <label class="checkbox_label" for="st_vibe_composer_enabled">
+                <input id="st_vibe_composer_enabled" type="checkbox" />
+                <span>Enable the chat toolbar button</span>
+            </label>
+            <div class="st-vibe-composer-control">
+                <b>Loop length</b>
+                <div class="st-vibe-composer-length-options" role="group" aria-label="Loop length in bars">
+                    <button class="menu_button st-vibe-composer-length" type="button" data-bars="4" aria-pressed="true">4 bars</button>
+                    <button class="menu_button st-vibe-composer-length" type="button" data-bars="8" aria-pressed="false">8 bars</button>
+                    <button class="menu_button st-vibe-composer-length" type="button" data-bars="16" aria-pressed="false">16 bars</button>
+                </div>
+            </div>
+            <label class="st-vibe-composer-control" for="st_vibe_composer_tempo">
+                <span><b>Tempo</b> <output id="st_vibe_composer_tempo_value" for="st_vibe_composer_tempo">74 BPM</output></span>
+                <input id="st_vibe_composer_tempo" type="range" min="65" max="85" step="1" value="74" list="st_vibe_composer_tempo_ticks" />
+                <datalist id="st_vibe_composer_tempo_ticks">
+                    <option value="65"></option>
+                    <option value="70"></option>
+                    <option value="75"></option>
+                    <option value="80"></option>
+                    <option value="85"></option>
+                </datalist>
+            </label>
+            <button id="st_vibe_composer_download" class="menu_button" type="button" disabled>
+                Download the generated theme as MIDI
+            </button>
+            <div class="st-vibe-composer-status" role="status">Ready when a character chat is open.</div>
+            <small>
+                Generates a short character-inspired instrumental using the active
+                SillyTavern generation backend. Audio samples and MIDI libraries
+                load from their pinned CDNs when first used.
+            </small>
+        </div>
+    </div>
+</div>

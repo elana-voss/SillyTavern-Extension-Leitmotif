@@ -1,0 +1,9 @@
+{
+    "display_name": "MIDI Vibe Composer",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "version": "0.1.0"
+}

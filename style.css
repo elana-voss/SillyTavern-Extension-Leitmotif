@@ -1,0 +1,65 @@
+.st-vibe-composer-settings small {
+    display: block;
+    margin-top: 0.5em;
+    opacity: 0.7;
+}
+
+.st-vibe-composer-settings #st_vibe_composer_download {
+    margin-top: 0.5em;
+}
+
+.st-vibe-composer-settings .st-vibe-composer-control {
+    display: block;
+    margin-top: 0.75em;
+}
+
+.st-vibe-composer-length-options {
+    display: flex;
+    gap: 0.4em;
+    margin-top: 0.35em;
+}
+
+.st-vibe-composer-length-options .menu_button[aria-pressed="true"] {
+    border-color: var(--active);
+    box-shadow: 0 0 0 1px var(--active);
+}
+
+#st_vibe_composer_tempo {
+    display: block;
+    width: 100%;
+}
+
+.st-vibe-composer-settings #st_vibe_composer_download {
+    display: block;
+}
+
+.st-vibe-composer-toolbar-button {
+    width: var(--bottomFormBlockSize);
+    height: var(--bottomFormBlockSize);
+    padding: 0;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.st-vibe-composer-toolbar-button:hover:not(:disabled) {
+    opacity: 1;
+    filter: brightness(1.2);
+}
+
+.st-vibe-composer-toolbar-button:disabled {
+    cursor: wait;
+    opacity: 0.45;
+}
+
+.st-vibe-composer-settings .st-vibe-composer-status {
+    margin-top: 0.5em;
+    opacity: 0.8;
+}
+
+.st-vibe-composer-settings .st-vibe-composer-status.error {
+    color: var(--warning);
+    opacity: 1;
+}
