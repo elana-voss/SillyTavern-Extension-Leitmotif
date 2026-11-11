@@ -22,8 +22,6 @@ const DEFAULT_SETTINGS = {
     enabled: true,
     lengthSeconds: 30,
     tempo: 74,
-    playbackMode: 'soundfont',
-    midiOutput: 'auto',
     instruments: { harmony: 'auto', bass: 'auto', melody: 'auto' },
 };
 
@@ -48,11 +46,6 @@ let activePlayers = [];
 let midiWriterPromise;
 let soundfontPromise;
 let masterCompressor;
-let midiAccess;
-let midiAccessPromise;
-let midiOutput;
-let scheduledMidiNotes = [];
-let midiDenied = false;
 
 function loadSettings() {
     extension_settings[MODULE] = Object.assign(
@@ -60,6 +53,9 @@ function loadSettings() {
         DEFAULT_SETTINGS,
         extension_settings[MODULE] ?? {},
     );
+    // Remove settings from the removed MIDI playback mode.
+    delete extension_settings[MODULE].playbackMode;
+    delete extension_settings[MODULE].midiOutput;
     if (!AVAILABLE_LENGTHS_SECONDS.includes(extension_settings[MODULE].lengthSeconds)) {
         extension_settings[MODULE].lengthSeconds = DEFAULT_SETTINGS.lengthSeconds;
     }
@@ -67,9 +63,6 @@ function loadSettings() {
         || extension_settings[MODULE].tempo < 65
         || extension_settings[MODULE].tempo > 85) {
         extension_settings[MODULE].tempo = DEFAULT_SETTINGS.tempo;
-    }
-    if (!['soundfont', 'midi'].includes(extension_settings[MODULE].playbackMode)) {
-        extension_settings[MODULE].playbackMode = DEFAULT_SETTINGS.playbackMode;
     }
     extension_settings[MODULE].instruments = Object.fromEntries(
         Object.entries(TRACK_ROLES).map(([role, options]) => {
@@ -133,94 +126,6 @@ function loadSoundfont() {
             });
     }
     return soundfontPromise;
-}
-
-function loadMidiAccess() {
-    if (!navigator.requestMIDIAccess) {
-        return Promise.reject(new Error('This browser does not support the Web MIDI API.'));
-    }
-    if (!midiAccessPromise) {
-        midiAccessPromise = navigator.requestMIDIAccess({ sysex: false, software: true })
-            .then(access => {
-                midiAccess = access;
-                access.onstatechange = () => {
-                    if (extension_settings[MODULE]?.playbackMode === 'midi' && !playbackActive) {
-                        const chosen = pickMidiOutput(access, true);
-                        if (chosen) {
-                            midiDenied = false;
-                        }
-                    }
-                };
-                return access;
-            })
-            .catch(error => {
-                midiAccessPromise = undefined;
-                throw error;
-            });
-    }
-    return midiAccessPromise;
-}
-
-function listMidiOutputs(access) {
-    return [...access.outputs.values()].map(port => ({ id: port.id, name: port.name || 'MIDI output' }));
-}
-
-function pickMidiOutput(access, updateOptions = false) {
-    const outputs = listMidiOutputs(access);
-    const savedId = extension_settings[MODULE].midiOutput;
-    const chosen = outputs.find(output => output.id === savedId) ?? outputs[0] ?? null;
-    midiOutput = chosen ? access.outputs.get(chosen.id) : undefined;
-    if (updateOptions) {
-        refreshMidiOutputOptions(outputs, chosen?.id ?? '', 'No MIDI output found');
-    }
-    return chosen;
-}
-
-function refreshMidiOutputOptions(outputs, chosenId, emptyHint = 'No MIDI output found') {
-    const select = document.getElementById('st_vibe_composer_midi_output');
-    if (!select) {
-        return;
-    }
-    select.innerHTML = '';
-    if (outputs.length === 0) {
-        const option = new Option(emptyHint, '');
-        option.disabled = true;
-        select.append(option);
-        select.value = '';
-    } else {
-        for (const output of outputs) {
-            select.append(new Option(output.name, output.id));
-        }
-        select.value = chosenId;
-    }
-    select.disabled = outputs.length === 0;
-    const wrapper = select.closest('.st-vibe-composer-control');
-    if (wrapper) {
-        wrapper.hidden = false;
-    }
-}
-
-const NOTE_SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-
-function noteNameToMidi(note) {
-    const match = /^([A-G])(#|b)?([1-6])$/.exec(note);
-    if (!match) {
-        return null;
-    }
-    const semitone = NOTE_SEMITONES[match[1]]
-        + (match[2] === '#' ? 1 : match[2] === 'b' ? -1 : 0);
-    return 12 * (Number(match[3]) + 1) + semitone;
-}
-
-function stopMidiNotes() {
-    if (!midiOutput) {
-        return;
-    }
-    midiOutput.clear();
-    for (const message of scheduledMidiNotes) {
-        midiOutput.send(message);
-    }
-    scheduledMidiNotes = [];
 }
 
 function getActiveCharacter() {
@@ -421,7 +326,6 @@ function stopPlayback() {
         clearTimeout(playbackTimer);
         playbackTimer = undefined;
     }
-    stopMidiNotes();
     for (const player of activePlayers) {
         player.stop();
     }
@@ -492,59 +396,6 @@ async function playScore(score) {
     }
 }
 
-function playScoreMidi(score, output) {
-    stopPlayback();
-    const generation = playbackGeneration;
-    playbackActive = true;
-    updateToolbar();
-
-    const channels = [0, 1, 2];
-    score.tracks.forEach((track, trackIndex) => {
-        const program = INSTRUMENTS[track.instrument];
-        if (Number.isInteger(program)) {
-            output.send([0xC0 | channels[trackIndex % 3], program]);
-        }
-    });
-
-    const beatLength = 60 / score.tempo;
-    const loopLength = score.loopBeats * beatLength;
-
-    const scheduleLoop = (startTimeMs = performance.now() + 80) => {
-        if (generation !== playbackGeneration) {
-            return;
-        }
-
-        score.tracks.forEach((track, trackIndex) => {
-            const channel = channels[trackIndex % 3];
-            const noteOnStatus = 0x90 | channel;
-            const noteOffStatus = 0x80 | channel;
-            track.events.forEach(event => {
-                const whenMs = startTimeMs + event.beat * beatLength * 1000;
-                const durationMs = event.duration * beatLength * 1000;
-                const velocity = Math.min(127, Math.max(1, event.velocity));
-                event.notes.forEach(note => {
-                    const midiNote = noteNameToMidi(note);
-                    if (midiNote === null) {
-                        return;
-                    }
-                    output.send([noteOnStatus, midiNote, velocity], Math.round(whenMs));
-                    output.send([noteOffStatus, midiNote, 0], Math.round(whenMs + durationMs));
-                    scheduledMidiNotes.push([noteOffStatus, midiNote, 0]);
-                });
-            });
-        });
-        const nextStart = startTimeMs + loopLength * 1000;
-        playbackTimer = setTimeout(
-            () => scheduleLoop(Math.max(nextStart, performance.now() + 80)),
-            Math.max(0, nextStart - performance.now() - 100),
-        );
-    };
-
-    updateStatus(`Playing ${currentCharacterName}'s looping theme through the system MIDI synthesizer.`);
-    scheduleLoop();
-    updateToolbar();
-}
-
 async function handleGenerateClick() {
     if (generating) {
         return;
@@ -595,36 +446,9 @@ async function handleGenerateClick() {
 
         currentScore = score;
         $('#st_vibe_composer_download').prop('disabled', false);
-        if (extension_settings[MODULE].playbackMode === 'soundfont') {
-            await ensureAudioContext();
-            updateStatus('Theme generated. Loading sampled instruments…');
-            await playScore(score);
-        } else if (midiDenied) {
-            await ensureAudioContext();
-            updateStatus('MIDI synth not available in this browser. Playing sampled instruments instead…');
-            await playScore(score);
-        } else {
-            try {
-                const access = await loadMidiAccess();
-                const chosen = pickMidiOutput(access, true);
-                if (!chosen) {
-                    throw new Error('No MIDI output is available on this system.');
-                }
-                updateStatus(`Theme generated. Playing through ${chosen.name}…`);
-                playScoreMidi(score, midiOutput);
-            } catch (midiError) {
-                midiDenied = true;
-                console.warn(LOG_TAG, 'MIDI playback unavailable; falling back to sampled playback.', midiError);
-                refreshMidiOutputOptions([], '', 'MIDI access denied or unavailable');
-                await ensureAudioContext();
-                updateStatus('MIDI synth not available. Playing sampled instruments instead…');
-                toastr.info(
-                    'MIDI playback is not available here (no site permission, no MIDI synth detected, or unsupported browser), so the theme is playing with sampled instruments instead.',
-                    'MIDI Vibe Composer',
-                );
-                await playScore(score);
-            }
-        }
+        await ensureAudioContext();
+        updateStatus('Theme generated. Loading sampled instruments…');
+        await playScore(score);
     } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         console.error(LOG_TAG, 'Theme generation or playback failed:', error);
@@ -706,39 +530,6 @@ function bindSettings() {
             updateStatus(`New themes will use ${tempo} BPM.`);
         });
     $('#st_vibe_composer_tempo_value').text(`${extension_settings[MODULE].tempo} BPM`);
-
-    $('.st-vibe-composer-mode').each(function () {
-        $(this).attr('aria-pressed', String($(this).attr('data-mode') === extension_settings[MODULE].playbackMode));
-    }).on('click', function () {
-        extension_settings[MODULE].playbackMode = $(this).attr('data-mode');
-        $('.st-vibe-composer-mode').attr('aria-pressed', 'false');
-        $(this).attr('aria-pressed', 'true');
-        saveSettingsDebounced();
-        if (extension_settings[MODULE].playbackMode === 'midi') {
-            if (playbackActive) {
-                stopPlayback();
-            }
-            midiDenied = false;
-            loadMidiAccess()
-                .then(access => pickMidiOutput(access, true))
-                .catch(error => {
-                    midiDenied = true;
-                    console.warn(LOG_TAG, 'MIDI access is not available; themes will play sampled until a MIDI output appears.', error);
-                    refreshMidiOutputOptions([], '', 'MIDI access denied or unavailable');
-                });
-        }
-        updateStatus(extension_settings[MODULE].playbackMode === 'midi'
-            ? 'MIDI mode selected. Themes play through the system MIDI synthesizer.'
-            : 'Sampled audio mode selected.');
-    });
-
-    $('#st_vibe_composer_midi_output').on('change', function () {
-        extension_settings[MODULE].midiOutput = $(this).val();
-        saveSettingsDebounced();
-        if (midiAccess) {
-            pickMidiOutput(midiAccess);
-        }
-    });
 
     $('.st-vibe-composer-instrument').each(function () {
         const role = $(this).attr('data-role');
