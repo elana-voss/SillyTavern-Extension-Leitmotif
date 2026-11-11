@@ -172,15 +172,22 @@ function getActiveCharacter() {
     };
 }
 
-function getToolbarButton(id, icon, title, action) {
-    const button = document.createElement('button');
+function getMenuButton(id, title, action) {
+    const button = document.createElement('div');
     button.id = id;
-    button.type = 'button';
-    button.className = 'st-vibe-composer-toolbar-button interactable';
+    button.className = 'list-group-item flex-container flexGap5 interactable';
     button.title = title;
+    button.setAttribute('role', 'button');
+    button.tabIndex = 0;
     button.setAttribute('aria-label', title);
-    button.innerHTML = `<i class="fa-solid ${icon}" aria-hidden="true"></i>`;
+    button.innerHTML = '<div class="fa-solid fa-music extensionsMenuExtensionButton" aria-hidden="true"></div><span>Generate Theme</span>';
     button.addEventListener('click', action);
+    button.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            action();
+        }
+    });
     return button;
 }
 
@@ -191,44 +198,50 @@ function updateToolbar() {
     if (button) {
         const state = generating ? 'generating' : playbackActive ? 'playing' : 'idle';
         const presentation = {
-            generating: { icon: 'fa-spinner st-vibe-composer-spinner', title: 'Generating character theme…' },
-            playing: { icon: 'fa-stop', title: 'Stop character theme' },
-            idle: { icon: 'fa-music', title: 'Generate character theme' },
+            generating: { icon: 'fa-spinner st-vibe-composer-spinner', title: 'Generating character theme…', label: 'Generating theme…' },
+            playing: { icon: 'fa-stop', title: 'Stop character theme', label: 'Stop character theme' },
+            idle: { icon: 'fa-music', title: 'Generate character theme', label: 'Generate Theme' },
         }[state];
 
         button.hidden = !enabled;
-        button.disabled = state === 'generating';
+        button.setAttribute('aria-disabled', String(state === 'generating'));
+        button.tabIndex = state === 'generating' ? -1 : 0;
         button.setAttribute('aria-busy', String(state === 'generating'));
         button.title = presentation.title;
         button.setAttribute('aria-label', presentation.title);
         if (button.dataset.state !== state) {
             button.dataset.state = state;
-            button.innerHTML = `<i class="fa-solid ${presentation.icon}" aria-hidden="true"></i>`;
+            button.innerHTML = `<div class="fa-solid ${presentation.icon} extensionsMenuExtensionButton" aria-hidden="true"></div><span>${presentation.label}</span>`;
         }
     }
 }
 
-function updateStatus(message, { error = false } = {}) {
+function updateStatus(message) {
     const status = document.querySelector('.st-vibe-composer-status');
     if (status) {
         status.textContent = message;
-        status.classList.toggle('error', error);
-        status.setAttribute('aria-live', error ? 'assertive' : 'polite');
+        status.setAttribute('aria-live', 'polite');
     }
 }
 
 function updateToolbarButtons() {
-    const container = document.getElementById('rightSendForm');
-    if (!container || !extension_settings[MODULE]?.enabled) {
+    const menu = document.getElementById('extensionsMenu');
+    if (!menu || !extension_settings[MODULE]?.enabled) {
         document.getElementById('st_vibe_composer_toggle')?.remove();
         return;
     }
 
     if (!document.getElementById('st_vibe_composer_toggle')) {
-        container.append(getToolbarButton(
+        let container = document.getElementById('st_vibe_composer_wand_container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'st_vibe_composer_wand_container';
+            container.className = 'extension_container';
+            menu.append(container);
+        }
+        container.append(getMenuButton(
             'st_vibe_composer_toggle',
-            'fa-music',
-            'Generate a character theme',
+            'Generate Theme',
             handleToolbarClick,
         ));
     }
@@ -394,12 +407,8 @@ async function handleGenerateClick() {
         const instrumentPreferences = extension_settings[MODULE].instruments;
         currentCharacterName = character.name;
         updateStatus(`Generating a theme for ${character.name}…`);
-        const response = await generateRaw({
-            prompt: getCharacterPrompt(character, bars, tempo, instrumentPreferences),
-            systemPrompt: 'You are a music composer. Return valid JSON only, following the requested score schema exactly.',
-            responseLength: Math.ceil(1200 * bars / 4),
-        });
-        const score = parseScore(response, {
+        const prompt = getCharacterPrompt(character, bars, tempo, instrumentPreferences);
+        const parseOptions = {
             loopBeats: bars * 4,
             targetTempo: tempo,
             instrumentOptions: Object.fromEntries(
@@ -408,7 +417,28 @@ async function handleGenerateClick() {
                     instrumentPreferences[role] === 'auto' ? options : [instrumentPreferences[role]],
                 ]),
             ),
-        });
+        };
+        let score;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+            const response = await generateRaw({
+                prompt: attempt === 0
+                    ? prompt
+                    : `${prompt}\n\nYour previous attempt was not valid JSON. Return a complete, compact score object only. Do not use markdown or omit closing brackets.`,
+                systemPrompt: 'You are a music composer. Return valid JSON only, following the requested score schema exactly.',
+                responseLength: Math.ceil((attempt === 0 ? 1200 : 2000) * bars / 4),
+            });
+            try {
+                score = parseScore(response, parseOptions);
+                break;
+            } catch (error) {
+                const isMalformedJson = error instanceof Error
+                    && (error.message.includes('invalid JSON') || error.message.includes('did not contain a JSON score'));
+                if (!isMalformedJson || attempt === 1) {
+                    throw error;
+                }
+                console.warn(LOG_TAG, 'The model returned malformed score JSON; retrying once.', error);
+            }
+        }
 
         currentScore = score;
         $('#st_vibe_composer_download').prop('disabled', false);
@@ -418,12 +448,16 @@ async function handleGenerateClick() {
             await playScore(score);
         } else {
             const duration = getApproximateDuration(bars, tempo);
-            updateStatus(`Generated a ${duration}-second MIDI theme. Download it to play.`);
+            updateStatus(`Generated a ${duration}-second MIDI file. Download it and open it in a MIDI player or synthesizer.`);
+            toastr.info(
+                'MIDI file generated. Open the extension settings and select “Download the generated theme as MIDI”. MIDI file mode does not play audio in the browser; choose Sampled to hear it here.',
+                'MIDI Vibe Composer',
+            );
         }
     } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         console.error(LOG_TAG, 'Theme generation or playback failed:', error);
-        updateStatus(`Theme generation failed: ${detail}`, { error: true });
+        updateStatus('Ready when a character chat is open.');
         toastr.error(detail, 'MIDI Vibe Composer', { timeOut: 12000, extendedTimeOut: 2000 });
     } finally {
         generating = false;
@@ -472,7 +506,7 @@ function downloadMidi() {
     }).catch(error => {
         console.error(LOG_TAG, 'MIDI export failed:', error);
         const detail = error instanceof Error ? error.message : String(error);
-        updateStatus(`MIDI export failed: ${detail}`, { error: true });
+        updateStatus(currentScore ? 'Theme ready. Generate another or download the MIDI.' : 'Ready when a character chat is open.');
         toastr.error(detail, 'MIDI Vibe Composer', { timeOut: 12000, extendedTimeOut: 2000 });
     });
 }
@@ -513,8 +547,8 @@ function bindSettings() {
             stopPlayback();
         }
         updateStatus(extension_settings[MODULE].playbackMode === 'midi'
-            ? 'MIDI-only mode selected. Download the generated MIDI to play it.'
-            : 'Sampled browser preview selected.');
+            ? 'MIDI file mode selected. Open downloaded files in a MIDI player or synthesizer.'
+            : 'Browser audio mode selected.');
     });
 
     $('.st-vibe-composer-instrument').each(function () {

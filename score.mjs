@@ -36,6 +36,22 @@ function isOnBeatGrid(value) {
     return Math.abs(value / BEAT_GRID - Math.round(value / BEAT_GRID)) < 1e-8;
 }
 
+function quantizeToBeatGrid(value) {
+    return Math.round(value / BEAT_GRID) * BEAT_GRID;
+}
+
+function normalizeNoteOctave(note, role) {
+    const [, pitch, octaveText] = note.match(/^([A-G](?:#|b)?)([1-6])$/);
+    const octave = Number(octaveText);
+    const [minimum, maximum] = role === 'bass'
+        ? [1, 2]
+        : role === 'harmony'
+            ? [2, 6]
+            : [3, 6];
+    const normalizedOctave = Math.max(minimum, Math.min(maximum, octave));
+    return `${pitch}${normalizedOctave}`;
+}
+
 export function parseScore(response, {
     loopBeats = 16,
     targetTempo,
@@ -115,51 +131,60 @@ export function parseScore(response, {
         }
 
         let previousBeat = -1;
-        const events = track.events.map((event, eventIndex) => {
-            if (!event || typeof event !== 'object' || Array.isArray(event)) {
-                throw new Error(`Track ${index + 1}, event ${eventIndex + 1} must be an object.`);
-            }
+        const events = [...track.events]
+            .sort((left, right) => {
+                if (!Number.isFinite(left?.beat) || !Number.isFinite(right?.beat)) {
+                    return 0;
+                }
+                return quantizeToBeatGrid(left.beat) - quantizeToBeatGrid(right.beat);
+            })
+            .map((event, eventIndex) => {
+                if (!event || typeof event !== 'object' || Array.isArray(event)) {
+                    throw new Error(`Track ${index + 1}, event ${eventIndex + 1} must be an object.`);
+                }
 
-            const { beat, duration, velocity } = event;
-            if (!Number.isFinite(beat)
-                || beat < 0
-                || beat >= loopBeats
-                || !isOnBeatGrid(beat)
-                || beat < previousBeat) {
-                throw new Error(`Track ${index + 1} events must be ordered on the sixteenth-note grid within the loop.`);
-            }
-            previousBeat = beat;
+                const beat = Number.isFinite(event.beat) ? quantizeToBeatGrid(event.beat) : event.beat;
+                const duration = Number.isFinite(event.duration) ? quantizeToBeatGrid(event.duration) : event.duration;
+                const { velocity } = event;
+                if (!Number.isFinite(beat)
+                    || beat < 0
+                    || beat >= loopBeats
+                    || !isOnBeatGrid(beat)
+                    || beat < previousBeat) {
+                    throw new Error(`Track ${index + 1} events must be ordered on the sixteenth-note grid within the loop.`);
+                }
+                previousBeat = beat;
 
-            if (!Number.isFinite(duration)
-                || duration < BEAT_GRID
-                || !isOnBeatGrid(duration)
-                || beat + duration > loopBeats) {
-                throw new Error(`Track ${index + 1}, event ${eventIndex + 1} has an invalid duration.`);
-            }
+                if (!Number.isFinite(duration)
+                    || duration < BEAT_GRID
+                    || !isOnBeatGrid(duration)
+                    || beat + duration > loopBeats) {
+                    throw new Error(`Track ${index + 1}, event ${eventIndex + 1} has an invalid duration.`);
+                }
 
-            if (!Number.isInteger(velocity) || velocity < 1 || velocity > 127) {
-                throw new Error(`Track ${index + 1}, event ${eventIndex + 1} velocity must be an integer from 1 to 127.`);
-            }
+                if (!Number.isInteger(velocity) || velocity < 1 || velocity > 127) {
+                    throw new Error(`Track ${index + 1}, event ${eventIndex + 1} velocity must be an integer from 1 to 127.`);
+                }
 
-            const pitches = typeof event.notes === 'string' ? [event.notes] : event.notes;
-            if (!Array.isArray(pitches)
-                || pitches.length < 1
-                || pitches.length > MAX_NOTES_PER_EVENT
-                || !pitches.every(note => typeof note === 'string' && NOTE_PATTERN.test(note))) {
-                throw new Error(`Track ${index + 1}, event ${eventIndex + 1} contains invalid notes.`);
-            }
+                const pitches = typeof event.notes === 'string' ? [event.notes] : event.notes;
+                if (!Array.isArray(pitches)
+                    || pitches.length < 1
+                    || pitches.length > MAX_NOTES_PER_EVENT
+                    || !pitches.every(note => typeof note === 'string' && NOTE_PATTERN.test(note))) {
+                    throw new Error(`Track ${index + 1}, event ${eventIndex + 1} contains invalid notes.`);
+                }
 
-            const allowedOctaves = track.role === 'bass'
-                ? /^[A-G](?:#|b)?[12]$/
-                : track.role === 'harmony'
-                    ? /^[A-G](?:#|b)?[2-6]$/
-                    : /^[A-G](?:#|b)?[3-6]$/;
-            if (!pitches.every(note => allowedOctaves.test(note))) {
-                throw new Error(`Track ${index + 1}, event ${eventIndex + 1} note octave does not match its role.`);
-            }
+                const transposedPitches = pitches.map(note => normalizeNoteOctave(note, track.role));
+                const normalizedPitches = [...new Set(transposedPitches)];
+                if (transposedPitches.some((note, noteIndex) => note !== pitches[noteIndex])) {
+                    console.warn(
+                        `[MidiVibeComposer] Adjusted note octaves for ${track.role} track ${index + 1}, event ${eventIndex + 1}.`,
+                        { original: pitches, normalized: transposedPitches },
+                    );
+                }
 
-            return { beat, duration, velocity, notes: [...pitches] };
-        });
+                return { beat, duration, velocity, notes: normalizedPitches };
+            });
 
         return {
             role: track.role,

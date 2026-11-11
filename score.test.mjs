@@ -70,6 +70,15 @@ test('accepts lower chord tones used by the generated harmony', () => {
     assert.deepEqual(parsed.tracks[0].events[2].notes, ['Bb2', 'D3', 'F3', 'A3', 'C4']);
 });
 
+test('transposes notes into the octave range for their track role', () => {
+    const response = structuredClone(validScore);
+    response.tracks[1].events[0].notes = 'Bb3';
+    response.tracks[2].events[0].notes = 'A2';
+    const parsed = parseScore(response);
+    assert.deepEqual(parsed.tracks[1].events[0].notes, ['Bb2']);
+    assert.deepEqual(parsed.tracks[2].events[0].notes, ['A3']);
+});
+
 test('supports selected loop lengths and tempo overrides', () => {
     const eightBarScore = {
         ...validScore,
@@ -196,23 +205,45 @@ test('rejects invalid pitches, velocities, and chords with too many notes', () =
     }
 });
 
-test('rejects out-of-grid, unsorted, and overhanging events', () => {
-    const cases = [
-        [{ ...validScore.tracks[1].events[0], beat: 0.1 }, /sixteenth-note grid/],
-        [{ ...validScore.tracks[1].events[0], duration: 0.1 }, /invalid duration/],
-        [{ ...validScore.tracks[1].events[0], beat: 15.75, duration: 0.5 }, /invalid duration/],
-    ];
-    for (const [invalidEvent, expected] of cases) {
-        const tracks = validScore.tracks.map((track, index) =>
-            index === 1 ? { ...track, events: [invalidEvent] } : track,
-        );
-        assert.throws(() => parseScore({ ...validScore, tracks }), expected);
-    }
+test('quantizes and orders generated events on the sixteenth-note grid', () => {
+    const irregular = validScore.tracks.map((track, index) =>
+        index === 2
+            ? {
+                ...track,
+                events: [
+                    { ...track.events[1], beat: 2.62, duration: 0.62 },
+                    { ...track.events[0], beat: 1.63, duration: 0.62 },
+                ],
+            }
+            : track,
+    );
+    const parsed = parseScore({ ...validScore, tracks: irregular });
+    assert.deepEqual(
+        parsed.tracks[2].events.map(({ beat, duration }) => [beat, duration]),
+        [[1.75, 0.5], [2.5, 0.5]],
+    );
+});
 
+test('rejects events that remain invalid after grid normalization', () => {
+    const overhanging = validScore.tracks.map((track, index) =>
+        index === 1
+            ? { ...track, events: [{ ...track.events[0], beat: 15.75, duration: 0.5 }] }
+            : track,
+    );
+    assert.throws(() => parseScore({ ...validScore, tracks: overhanging }), /invalid duration/);
+
+    const outsideLoop = validScore.tracks.map((track, index) =>
+        index === 1 ? { ...track, events: [{ ...track.events[0], beat: 16 }] } : track,
+    );
+    assert.throws(() => parseScore({ ...validScore, tracks: outsideLoop }), /sixteenth-note grid/);
+});
+
+test('orders unsorted track events by their normalized beat', () => {
     const unsorted = validScore.tracks.map((track, index) =>
         index === 1 ? { ...track, events: [...track.events].reverse() } : track,
     );
-    assert.throws(() => parseScore({ ...validScore, tracks: unsorted }), /events must be ordered/);
+    const parsed = parseScore({ ...validScore, tracks: unsorted });
+    assert.deepEqual(parsed.tracks[1].events.map(event => event.beat), [0, 2, 4]);
 });
 
 test('rejects responses with invalid JSON', () => {
