@@ -41,10 +41,13 @@ const INSTRUMENT_LABELS = {
 const SUSTAINED_INSTRUMENTS = new Set(['pad_2_warm', 'flute']);
 const NOTE_SEMITONES = { A: 9, B: 11, C: 0, D: 2, E: 4, F: 5, G: 7 };
 // Loop region of a sustained sample: start past the attack, end just before the
-// sample's last frames, and crossfade the seam so looping adds no audible tick.
+// sample's last frames. Loop points are only used when the waveform there lines up
+// with itself, because Web Audio restarts a loop without any blending, so a
+// phase mismatch at the loop point would step the signal and tick once per pass.
 const LOOP_START_RATIO = 0.4;
 const LOOP_END_MARGIN_SECONDS = 0.02;
-const LOOP_CROSSFADE_SECONDS = 0.3;
+const LOOP_MIN_PERIOD_SECONDS = 0.4;
+const LOOP_MATCH_TOLERANCE = 2.5;
 
 let audioContext;
 let currentScore;
@@ -367,73 +370,76 @@ function getNoteBuffer(player, note) {
     return (midi === null ? null : player.buffers?.[midi]) ?? player.buffers?.[note] ?? null;
 }
 
-// Web Audio loops restart the buffer with no crossfade, so looping a sample at an
-// arbitrary point leaves a discontinuity that ticks once per loop pass. Blend the
-// material that would follow the seam into the loop start instead, which makes the
-// loop continuous by construction.
-function buildLoopableBuffer(buffer) {
-    if (!buffer || buffer.leitmotifLoop) {
-        return buffer;
+// Web Audio loops restart a buffer with no crossfade, so a loop point has to land
+// where the waveform continues smoothly into itself. Nothing here rewrites the
+// sample: the scan only chooses loop points whose value and slope match the loop
+// start, so no discontinuity can be introduced anywhere in the note.
+const loopPointsCache = new WeakMap();
+
+function findLoopPoints(buffer) {
+    if (!buffer) {
+        return null;
+    }
+    if (loopPointsCache.has(buffer)) {
+        return loopPointsCache.get(buffer);
     }
 
-    const loopStart = buffer.duration * LOOP_START_RATIO;
-    const loopEnd = buffer.duration - LOOP_END_MARGIN_SECONDS;
-    const loopPeriod = loopEnd - loopStart;
-    const crossfade = Math.min(LOOP_CROSSFADE_SECONDS, loopPeriod * 0.3);
+    const { sampleRate, numberOfChannels, duration } = buffer;
+    // +1 frame so the loop start has a preceding sample to measure slope against.
+    const startFrame = Math.floor(duration * LOOP_START_RATIO * sampleRate) + 1;
+    const minEndFrame = startFrame + Math.floor(LOOP_MIN_PERIOD_SECONDS * sampleRate);
+    const maxEndFrame = Math.floor((duration - LOOP_END_MARGIN_SECONDS) * sampleRate);
 
-    if (!(loopPeriod > 0.1) || !(crossfade > 0.01)) {
-        return buffer;
-    }
+    let points = null;
 
-    const { sampleRate, numberOfChannels } = buffer;
-    const loopStartFrame = Math.floor(loopStart * sampleRate);
-    const crossfadeFrames = Math.floor(crossfade * sampleRate);
-    const seamFrame = Math.floor((loopEnd - crossfade) * sampleRate);
-
-    if (loopStartFrame + crossfadeFrames >= seamFrame) {
-        return buffer;
-    }
-
-    const loopable = audioContext.createBuffer(numberOfChannels, seamFrame, sampleRate);
-    for (let channel = 0; channel < numberOfChannels; channel++) {
-        const source = buffer.getChannelData(channel);
-        const target = loopable.getChannelData(channel);
-        target.set(source.subarray(0, seamFrame));
-
-        for (let frame = 0; frame < crossfadeFrames; frame++) {
-            const blend = frame / crossfadeFrames;
-            const index = loopStartFrame + frame;
-            // Fade in the material that precedes the seam so the wrap-around is
-            // sample-continuous, then fade the original loop start out.
-            target[index] = source[index] * blend + source[seamFrame + frame] * (1 - blend);
+    if (minEndFrame <= maxEndFrame) {
+        const channels = [];
+        for (let channel = 0; channel < numberOfChannels; channel++) {
+            channels.push(buffer.getChannelData(channel));
         }
-    }
 
-    loopable.leitmotifLoop = {
-        start: loopStartFrame / sampleRate,
-        end: seamFrame / sampleRate,
-    };
-    return loopable;
-}
+        const mismatch = (frame) => {
+            let cost = 0;
+            for (const data of channels) {
+                cost += Math.abs(data[frame] - data[startFrame])
+                    + Math.abs((data[frame] - data[frame - 1]) - (data[startFrame] - data[startFrame - 1]));
+            }
+            return cost;
+        };
 
-function prepareLoopableSamples(player, notes) {
-    for (const note of notes) {
-        const midi = noteToMidiNumber(note);
-        const keys = [];
-        if (midi !== null && player.buffers?.[midi]) {
-            keys.push(midi);
-        }
-        if (player.buffers?.[note]) {
-            keys.push(note);
-        }
-        for (const key of keys) {
-            const buffer = player.buffers[key];
-            const loopable = buildLoopableBuffer(buffer);
-            if (loopable !== buffer) {
-                player.buffers[key] = loopable;
+        let bestFrame = minEndFrame;
+        let bestCost = Infinity;
+        for (let frame = minEndFrame; frame <= maxEndFrame; frame++) {
+            const cost = mismatch(frame);
+            if (cost < bestCost) {
+                bestCost = cost;
+                bestFrame = frame;
             }
         }
+
+        // Accept the loop only when the step across the wrap is small next to the
+        // signal's own sample-to-sample movement; otherwise the caller fades the
+        // note out inside the sample instead, which cannot tick.
+        const wrapsCleanly = channels.every(data => {
+            let movement = 0;
+            for (let frame = startFrame + 1; frame <= maxEndFrame; frame++) {
+                movement += Math.abs(data[frame] - data[frame - 1]);
+            }
+            movement /= maxEndFrame - startFrame;
+            const wrapStep = Math.abs(data[startFrame] - data[bestFrame - 1]);
+            return movement > 0 && wrapStep <= LOOP_MATCH_TOLERANCE * movement;
+        });
+
+        if (wrapsCleanly) {
+            points = {
+                start: startFrame / sampleRate,
+                end: bestFrame / sampleRate,
+            };
+        }
     }
+
+    loopPointsCache.set(buffer, points);
+    return points;
 }
 
 async function playScore(score) {
@@ -459,17 +465,6 @@ async function playScore(score) {
         }
 
         activePlayers = players;
-        // Rebuild sustained samples with a crossfaded loop so held notes can extend
-        // past the sample length without a click at the loop seam.
-        score.tracks.forEach((track, trackIndex) => {
-            if (SUSTAINED_INSTRUMENTS.has(track.instrument)) {
-                prepareLoopableSamples(
-                    players[trackIndex],
-                    track.events.flatMap(event => event.notes),
-                );
-            }
-        });
-
         const beatLength = 60 / score.tempo;
         const loopLength = score.loopBeats * beatLength;
 
@@ -500,16 +495,16 @@ async function playScore(score) {
                             ? Math.min(0.6, requestedLength * 0.5, sampleLength * 0.4)
                             : Math.min(0.6, requestedLength * 0.5);
                         const options = { gain, release };
-                        if (hasSampleLength && sustainedInstrument) {
-                            // Loop the crossfaded steady-state region of the sample (past
-                            // the attack) so held notes keep sounding for their full length.
-                            const loop = buffer.leitmotifLoop;
+                        // Held notes on sustained instruments loop the sample region
+                        // whose waveform continues smoothly into itself, so the note
+                        // can reach its full length without a tick at the loop point.
+                        const loopPoints = hasSampleLength && sustainedInstrument
+                            ? findLoopPoints(buffer)
+                            : null;
+                        if (loopPoints) {
                             options.loop = true;
-                            options.loopStart = loop?.start ?? sampleLength * LOOP_START_RATIO;
-                            options.loopEnd = loop?.end ?? Math.max(
-                                options.loopStart + 0.05,
-                                sampleLength - LOOP_END_MARGIN_SECONDS,
-                            );
+                            options.loopStart = loopPoints.start;
+                            options.loopEnd = loopPoints.end;
                             options.duration = requestedLength;
                         } else if (hasSampleLength) {
                             // Decaying instruments cannot be looped without repeating
