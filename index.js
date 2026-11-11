@@ -7,6 +7,7 @@ import {
 import {
     getApproximateDuration,
     getLoopBars,
+    INSTRUMENTS,
     METERS,
     parseScore,
     SCORE_JSON_SCHEMA,
@@ -26,8 +27,13 @@ const MODULE = 'leitmotif';
 const LEGACY_MODULE = 'vibeComposerMidi';
 const EXT_DIR = 'third-party/SillyTavern-Extension-Leitmotif';
 const LOG_TAG = '[Leitmotif]';
-const MIDI_WRITER_URL = 'https://unpkg.com/midi-writer-js@3.2.1/browser/midiwriter.js';
-const SOUNDFONT_URL = 'https://unpkg.com/soundfont-player@0.12.0/dist/soundfont-player.min.js';
+// Everything the extension needs at runtime ships inside its own folder — the
+// vendored libraries in lib/ and the FluidR3 samples in samples/ — so a normal
+// git install from GitHub is fully self-contained and works offline.
+const EXT_URL = new URL('./', import.meta.url);
+const MIDI_WRITER_URL = new URL('lib/midiwriter.js', EXT_URL).href;
+const SOUNDFONT_URL = new URL('lib/soundfont-player.min.js', EXT_URL).href;
+const SAMPLE_URL_BASE = new URL('samples/', EXT_URL);
 const AVAILABLE_LENGTHS_SECONDS = [15, 30, 60, 90, 120];
 const DEFAULT_SETTINGS = {
     enabled: true,
@@ -37,58 +43,74 @@ const DEFAULT_SETTINGS = {
     variety: 'standard',
 };
 
-const INSTRUMENT_LABELS = {
+const INSTRUMENT_LABEL_OVERRIDES = {
     acoustic_bass: 'Acoustic bass',
     acoustic_grand_piano: 'Grand piano',
     acoustic_guitar_nylon: 'Nylon guitar',
     alto_sax: 'Alto sax',
-    celesta: 'Celesta',
     choir_aahs: 'Choir',
-    clarinet: 'Clarinet',
-    contrabass: 'Contrabass',
     electric_bass_finger: 'Fingered electric bass',
     electric_guitar_clean: 'Clean electric guitar',
     electric_piano_1: 'Electric piano',
-    flute: 'Flute',
     french_horn: 'French horn',
-    marimba: 'Marimba',
-    music_box: 'Music box',
-    ocarina: 'Ocarina',
     orchestral_harp: 'Harp',
     pad_1_new_age: 'New-age synth pad',
     pad_2_warm: 'Warm synth pad',
     pad_4_choir: 'Choir synth pad',
     pizzicato_strings: 'Pizzicato strings',
-    recorder: 'Recorder',
     string_ensemble_1: 'String ensemble',
     synth_bass_1: 'Synth bass',
     synth_strings_1: 'Synth strings',
     tremolo_strings: 'Tremolo strings',
-    vibraphone: 'Vibraphone',
-    violin: 'Violin',
     voice_oohs: 'Voice oohs',
 };
 
+function prettifyInstrumentName(name) {
+    return name
+        .replace(/__/g, ' ')
+        .split('_')
+        .map(word => (word ? word[0].toUpperCase() + word.slice(1) : word))
+        .join(' ');
+}
+
+const INSTRUMENT_LABELS = Object.freeze(Object.fromEntries(
+    Object.keys(INSTRUMENTS).map(name => [name, INSTRUMENT_LABEL_OVERRIDES[name] ?? prettifyInstrumentName(name)]),
+));
+
 // Instruments whose FluidR3 samples are sustained long tones: holding a note past
 // the sample length must keep looping the steady-state tail instead of falling
-// silent. Decaying instruments (pianos, guitars, harp, marimba, basses, pizzicato)
-// are excluded so their fade finishes inside the sample.
+// silent. Decaying instruments (pianos, guitars, harp, marimba, basses, pizzicato,
+// percussion) are excluded so their fade finishes inside the sample. Looping is
+// fail-soft per note: without a clean loop point a note fades out inside its
+// sample just like a decaying instrument, so an over-inclusive entry is safe.
 const SUSTAINED_INSTRUMENTS = new Set([
-    'pad_2_warm',
-    'pad_1_new_age',
-    'pad_4_choir',
-    'string_ensemble_1',
-    'tremolo_strings',
-    'synth_strings_1',
-    'choir_aahs',
-    'voice_oohs',
-    'flute',
-    'recorder',
-    'ocarina',
-    'clarinet',
-    'french_horn',
-    'alto_sax',
-    'violin',
+    // Pads
+    'pad_1_new_age', 'pad_2_warm', 'pad_3_polysynth', 'pad_4_choir',
+    'pad_5_bowed', 'pad_6_metallic', 'pad_7_halo', 'pad_8_sweep',
+    // Ensemble and solo strings
+    'string_ensemble_1', 'string_ensemble_2', 'synth_strings_1', 'synth_strings_2',
+    'tremolo_strings', 'violin', 'viola', 'cello',
+    // Voices
+    'choir_aahs', 'voice_oohs', 'synth_choir',
+    // Winds
+    'flute', 'piccolo', 'recorder', 'pan_flute', 'blown_bottle',
+    'shakuhachi', 'whistle', 'ocarina',
+    // Reeds
+    'clarinet', 'oboe', 'english_horn', 'bassoon', 'shanai', 'harmonica',
+    // Saxophones
+    'soprano_sax', 'alto_sax', 'tenor_sax', 'baritone_sax',
+    // Brass
+    'trumpet', 'muted_trumpet', 'french_horn', 'trombone', 'tuba',
+    'brass_section', 'synth_brass_1', 'synth_brass_2',
+    // Organs and free reeds
+    'drawbar_organ', 'percussive_organ', 'rock_organ', 'church_organ',
+    'reed_organ', 'accordion', 'tango_accordion', 'bagpipe',
+    // Synth leads and basses
+    'lead_1_square', 'lead_2_sawtooth', 'lead_3_calliope', 'lead_4_chiff',
+    'lead_5_charang', 'lead_6_voice', 'lead_7_fifths', 'lead_8_bass__lead',
+    'synth_bass_1', 'synth_bass_2',
+    // Atmospheric FX patches hold a steady texture
+    'fx_2_soundtrack', 'fx_4_atmosphere', 'fx_6_goblins', 'fx_7_echoes', 'fx_8_scifi',
 ]);
 const NOTE_SEMITONES = { A: 9, B: 11, C: 0, D: 2, E: 4, F: 5, G: 7 };
 // Loop region of a sustained sample: start past the attack, end just before the
@@ -207,7 +229,7 @@ function loadScript(url, globalName) {
         };
         script.onerror = () => {
             script.remove();
-            reject(new Error(`Could not load ${url}. Check your network connection and retry.`));
+            reject(new Error(`Could not load ${url}. The extension appears to be installed incompletely; reinstall it.`));
         };
         document.head.append(script);
     });
@@ -451,7 +473,7 @@ Return only a JSON object with this exact shape:
 
 Requirements:
 - Set the tempo to exactly ${tempo} BPM and the meter to exactly "${meter}". Compose a ${bars}-bar ${meter} loop lasting exactly ${loopBeats} beats.
-- Tracks: harmony, bass, and melody are required. counter (answering line) and texture (sustained layer or ostinato) are optional; include them only when the brief benefits from the extra layer (3 to 5 tracks total). Pick one instrument per role from these timbre options: ${instrumentLine}. Let the brief's timbre hints decide among them.
+- Tracks: harmony, bass, and melody are required. counter (answering line) and texture (sustained layer or ostinato) are optional; include them only when the brief benefits from the extra layer (3 to 5 tracks total). Pick one instrument per role from the full 128-instrument General MIDI palette the schema allows; these timbres are the recommended starting points per role: ${instrumentLine}. Let the brief's timbre hints decide.
 - Each track has an "events" array. Each event has "beat" (start position from 0 to just before ${loopBeats}), "duration" (in beats), "velocity" (integer from 1 to 127), and "notes" (one note name or an array of simultaneous note names). The example is abbreviated; compose enough events to develop the full arrangement.
 - Place events on a sixteenth-note grid, where beat positions advance in steps of 0.25. Use appropriate note durations and overlapping sustained layers so rests feel intentional rather than leaving accidental gaps. Durations must fit within the loop.
 - Use note names such as C4, F#3, or Bb4. Octaves: bass strictly 1-2 (bass in octave 3 or higher is wrong; write D2 or E2, not D3 or E3); harmony 2-6; melody 3-6; counter 3-6; texture 2-6. Chords may contain up to five notes.
@@ -604,12 +626,19 @@ async function playScore(score) {
     updateStatus('Loading instrument samples…');
     try {
         const soundfont = await loadSoundfont();
-        const players = await Promise.all(score.tracks.map(track =>
-            soundfont.instrument(audioContext, track.instrument, {
-                soundfont: 'FluidR3_GM',
-                destination: masterCompressor,
-            }),
-        ));
+        // Samples ship with the extension in samples/; there is no network
+        // fallback, so a missing file means an incomplete install.
+        const players = await Promise.all(score.tracks.map(async track => {
+            const url = new URL(`${track.instrument}-mp3.js`, SAMPLE_URL_BASE).href;
+            try {
+                return await soundfont.instrument(audioContext, url, {
+                    destination: masterCompressor,
+                });
+            } catch (error) {
+                console.error(LOG_TAG, `Could not load the sample file for ${track.instrument}`, url, error);
+                throw new Error(`The ${track.instrument} sample could not be loaded. The extension appears to be installed incompletely; reinstall it.`);
+            }
+        }));
 
         if (generation !== playbackGeneration) {
             for (const player of players) {

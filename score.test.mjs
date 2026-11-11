@@ -181,38 +181,21 @@ test('wraps straying events across the loop seam and clamps their durations', ()
     );
 });
 
-test('supports the defined instruments and maps unknown ones per role', () => {
-    assert.deepEqual(Object.keys(INSTRUMENTS), [
-        'acoustic_bass',
-        'acoustic_grand_piano',
-        'acoustic_guitar_nylon',
-        'alto_sax',
-        'celesta',
-        'choir_aahs',
-        'clarinet',
-        'contrabass',
-        'electric_bass_finger',
-        'electric_guitar_clean',
-        'electric_piano_1',
-        'flute',
-        'french_horn',
-        'marimba',
-        'music_box',
-        'ocarina',
-        'orchestral_harp',
-        'pad_1_new_age',
-        'pad_2_warm',
-        'pad_4_choir',
-        'pizzicato_strings',
-        'recorder',
-        'string_ensemble_1',
-        'synth_bass_1',
-        'synth_strings_1',
-        'tremolo_strings',
-        'vibraphone',
-        'violin',
-        'voice_oohs',
-    ]);
+test('supports the full General MIDI palette and maps unknown ones per role', () => {
+    // All 128 General MIDI programs are mapped, uniquely.
+    assert.equal(Object.keys(INSTRUMENTS).length, 128);
+    const programs = Object.values(INSTRUMENTS).sort((left, right) => left - right);
+    assert.deepEqual(programs, Array.from({ length: 128 }, (_, index) => index));
+    assert.equal(INSTRUMENTS.acoustic_grand_piano, 0);
+    assert.equal(INSTRUMENTS.flute, 73);
+    assert.equal(INSTRUMENTS.lead_8_bass__lead, 87);
+    assert.equal(INSTRUMENTS.gunshot, 127);
+    // Role guidance lists only name instruments from the palette.
+    for (const options of Object.values(TRACK_ROLES)) {
+        for (const instrument of options) {
+            assert.ok(Object.hasOwn(INSTRUMENTS, instrument), `unknown role instrument: ${instrument}`);
+        }
+    }
     assert.deepEqual(Object.keys(TRACK_ROLES), ['harmony', 'bass', 'melody', 'counter', 'texture']);
     // Any known instrument is accepted on any role: the model chooses the timbre.
     const mixed = parseScore({
