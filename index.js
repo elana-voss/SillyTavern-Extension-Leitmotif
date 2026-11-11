@@ -52,6 +52,7 @@ let midiAccess;
 let midiAccessPromise;
 let midiOutput;
 let scheduledMidiNotes = [];
+let midiDenied = false;
 
 function loadSettings() {
     extension_settings[MODULE] = Object.assign(
@@ -144,7 +145,10 @@ function loadMidiAccess() {
                 midiAccess = access;
                 access.onstatechange = () => {
                     if (extension_settings[MODULE]?.playbackMode === 'midi' && !playbackActive) {
-                        pickMidiOutput(access, true);
+                        const chosen = pickMidiOutput(access, true);
+                        if (chosen) {
+                            midiDenied = false;
+                        }
                     }
                 };
                 return access;
@@ -595,6 +599,10 @@ async function handleGenerateClick() {
             await ensureAudioContext();
             updateStatus('Theme generated. Loading sampled instruments…');
             await playScore(score);
+        } else if (midiDenied) {
+            await ensureAudioContext();
+            updateStatus('MIDI synth not available in this browser. Playing sampled instruments instead…');
+            await playScore(score);
         } else {
             try {
                 const access = await loadMidiAccess();
@@ -605,6 +613,7 @@ async function handleGenerateClick() {
                 updateStatus(`Theme generated. Playing through ${chosen.name}…`);
                 playScoreMidi(score, midiOutput);
             } catch (midiError) {
+                midiDenied = true;
                 console.warn(LOG_TAG, 'MIDI playback unavailable; falling back to sampled playback.', midiError);
                 refreshMidiOutputOptions([], '', 'MIDI access denied or unavailable');
                 await ensureAudioContext();
@@ -705,8 +714,18 @@ function bindSettings() {
         $('.st-vibe-composer-mode').attr('aria-pressed', 'false');
         $(this).attr('aria-pressed', 'true');
         saveSettingsDebounced();
-        if (extension_settings[MODULE].playbackMode === 'midi' && playbackActive) {
-            stopPlayback();
+        if (extension_settings[MODULE].playbackMode === 'midi') {
+            if (playbackActive) {
+                stopPlayback();
+            }
+            midiDenied = false;
+            loadMidiAccess()
+                .then(access => pickMidiOutput(access, true))
+                .catch(error => {
+                    midiDenied = true;
+                    console.warn(LOG_TAG, 'MIDI access is not available; themes will play sampled until a MIDI output appears.', error);
+                    refreshMidiOutputOptions([], '', 'MIDI access denied or unavailable');
+                });
         }
         updateStatus(extension_settings[MODULE].playbackMode === 'midi'
             ? 'MIDI mode selected. Themes play through the system MIDI synthesizer.'
