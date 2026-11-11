@@ -12,9 +12,10 @@ import {
     TRACK_ROLES,
 } from './score.mjs';
 
-const MODULE = 'vibeComposerMidi';
-const EXT_DIR = 'third-party/SillyTavern-Extension-Midi';
-const LOG_TAG = '[MidiVibeComposer]';
+const MODULE = 'leitmotif';
+const LEGACY_MODULE = 'vibeComposerMidi';
+const EXT_DIR = 'third-party/SillyTavern-Extension-Leitmotif';
+const LOG_TAG = '[Leitmotif]';
 const MIDI_WRITER_URL = 'https://unpkg.com/midi-writer-js@3.2.1/browser/midiwriter.js';
 const SOUNDFONT_URL = 'https://unpkg.com/soundfont-player@0.12.0/dist/soundfont-player.min.js';
 const AVAILABLE_LENGTHS_SECONDS = [15, 30, 60, 90, 120];
@@ -48,6 +49,11 @@ let soundfontPromise;
 let masterCompressor;
 
 function loadSettings() {
+    if (extension_settings[MODULE] === undefined && extension_settings[LEGACY_MODULE] !== undefined) {
+        // Carry settings over from the extension's previous name.
+        extension_settings[MODULE] = extension_settings[LEGACY_MODULE];
+        delete extension_settings[LEGACY_MODULE];
+    }
     extension_settings[MODULE] = Object.assign(
         {},
         DEFAULT_SETTINGS,
@@ -77,7 +83,7 @@ function updateLengthEstimate() {
     const seconds = extension_settings[MODULE].lengthSeconds;
     const bars = getLoopBars(seconds, tempo);
     const actualSeconds = getApproximateDuration(bars, tempo);
-    $('#st_vibe_composer_length_estimate').text(
+    $('#st_leitmotif_length_estimate').text(
         `About ${actualSeconds} seconds (${bars} bars) at the selected tempo`,
     );
 }
@@ -191,13 +197,13 @@ function getMenuButton(id, title, action) {
 }
 
 function updateToolbar() {
-    const button = document.getElementById('st_vibe_composer_toggle');
+    const button = document.getElementById('st_leitmotif_toggle');
     const enabled = extension_settings[MODULE]?.enabled === true;
 
     if (button) {
         const state = generating ? 'generating' : playbackActive ? 'playing' : 'idle';
         const presentation = {
-            generating: { icon: 'fa-spinner extensionsMenuExtensionButton st-vibe-composer-spinner', title: 'Generating theme', label: 'Generating Theme' },
+            generating: { icon: 'fa-spinner extensionsMenuExtensionButton st-leitmotif-spinner', title: 'Generating theme', label: 'Generating Theme' },
             playing: { icon: 'fa-stop extensionsMenuExtensionButton', title: 'Stop theme', label: 'Stop Theme' },
             idle: { icon: 'fa-music extensionsMenuExtensionButton', title: 'Generate theme', label: 'Generate Theme' },
         }[state];
@@ -216,7 +222,7 @@ function updateToolbar() {
 }
 
 function updateStatus(message) {
-    const status = document.querySelector('.st-vibe-composer-status');
+    const status = document.querySelector('.st-leitmotif-status');
     if (status) {
         status.textContent = message;
         status.setAttribute('aria-live', 'polite');
@@ -226,20 +232,20 @@ function updateStatus(message) {
 function updateToolbarButtons() {
     const menu = document.getElementById('extensionsMenu');
     if (!menu || !extension_settings[MODULE]?.enabled) {
-        document.getElementById('st_vibe_composer_toggle')?.remove();
+        document.getElementById('st_leitmotif_toggle')?.remove();
         return;
     }
 
-    if (!document.getElementById('st_vibe_composer_toggle')) {
-        let container = document.getElementById('st_vibe_composer_wand_container');
+    if (!document.getElementById('st_leitmotif_toggle')) {
+        let container = document.getElementById('st_leitmotif_wand_container');
         if (!container) {
             container = document.createElement('div');
-            container.id = 'st_vibe_composer_wand_container';
+            container.id = 'st_leitmotif_wand_container';
             container.className = 'extension_container';
             menu.append(container);
         }
         container.append(getMenuButton(
-            'st_vibe_composer_toggle',
+            'st_leitmotif_toggle',
             'Generate Theme',
             handleToolbarClick,
         ));
@@ -445,7 +451,7 @@ async function handleGenerateClick() {
         }
 
         currentScore = score;
-        $('#st_vibe_composer_download').prop('disabled', false);
+        $('#st_leitmotif_download').prop('disabled', false);
         await ensureAudioContext();
         updateStatus('Theme generated. Loading sampled instruments…');
         await playScore(score);
@@ -453,7 +459,7 @@ async function handleGenerateClick() {
         const detail = error instanceof Error ? error.message : String(error);
         console.error(LOG_TAG, 'Theme generation or playback failed:', error);
         updateStatus('Ready when a character chat is open.');
-        toastr.error(detail, 'MIDI Vibe Composer', { timeOut: 12000, extendedTimeOut: 2000 });
+        toastr.error(detail, 'Leitmotif', { timeOut: 12000, extendedTimeOut: 2000 });
     } finally {
         generating = false;
         updateToolbar();
@@ -462,7 +468,7 @@ async function handleGenerateClick() {
 
 function downloadMidi() {
     if (!currentScore) {
-        toastr.warning('Generate a theme before downloading MIDI.', 'MIDI Vibe Composer');
+        toastr.warning('Generate a theme before downloading MIDI.', 'Leitmotif');
         return;
     }
 
@@ -502,12 +508,12 @@ function downloadMidi() {
         console.error(LOG_TAG, 'MIDI export failed:', error);
         const detail = error instanceof Error ? error.message : String(error);
         updateStatus(currentScore ? 'Theme ready. Generate another or download the MIDI.' : 'Ready when a character chat is open.');
-        toastr.error(detail, 'MIDI Vibe Composer', { timeOut: 12000, extendedTimeOut: 2000 });
+        toastr.error(detail, 'Leitmotif', { timeOut: 12000, extendedTimeOut: 2000 });
     });
 }
 
 function bindSettings() {
-    $('#st_vibe_composer_enabled')
+    $('#st_leitmotif_enabled')
         .prop('checked', extension_settings[MODULE].enabled)
         .on('change', function () {
             extension_settings[MODULE].enabled = Boolean($(this).prop('checked'));
@@ -517,21 +523,21 @@ function bindSettings() {
             }
             updateToolbarButtons();
         });
-        $('#st_vibe_composer_download').on('click', downloadMidi);
+        $('#st_leitmotif_download').on('click', downloadMidi);
 
-        $('#st_vibe_composer_tempo')
+        $('#st_leitmotif_tempo')
         .val(extension_settings[MODULE].tempo)
         .on('input change', function () {
             const tempo = Number(this.value);
             extension_settings[MODULE].tempo = tempo;
-            $('#st_vibe_composer_tempo_value').text(`${tempo} BPM`);
+            $('#st_leitmotif_tempo_value').text(`${tempo} BPM`);
             saveSettingsDebounced();
             updateLengthEstimate();
             updateStatus(`New themes will use ${tempo} BPM.`);
         });
-    $('#st_vibe_composer_tempo_value').text(`${extension_settings[MODULE].tempo} BPM`);
+    $('#st_leitmotif_tempo_value').text(`${extension_settings[MODULE].tempo} BPM`);
 
-    $('.st-vibe-composer-instrument').each(function () {
+    $('.st-leitmotif-instrument').each(function () {
         const role = $(this).attr('data-role');
         const options = TRACK_ROLES[role];
         $(this).append(new Option('Let the AI choose', 'auto'));
@@ -546,12 +552,12 @@ function bindSettings() {
             });
     });
 
-    $('.st-vibe-composer-length').each(function () {
+    $('.st-leitmotif-length').each(function () {
         const selected = Number($(this).attr('data-seconds')) === extension_settings[MODULE].lengthSeconds;
         $(this).attr('aria-pressed', String(selected));
     }).on('click', function () {
         extension_settings[MODULE].lengthSeconds = Number($(this).attr('data-seconds'));
-        $('.st-vibe-composer-length').attr('aria-pressed', 'false');
+        $('.st-leitmotif-length').attr('aria-pressed', 'false');
         $(this).attr('aria-pressed', 'true');
         saveSettingsDebounced();
         updateLengthEstimate();
@@ -569,6 +575,6 @@ jQuery(async () => {
         setupToolbarObserver();
     } catch (error) {
         console.error(LOG_TAG, 'Extension initialization failed:', error);
-        toastr.error(error.message || String(error), 'MIDI Vibe Composer');
+        toastr.error(error.message || String(error), 'Leitmotif');
     }
 });

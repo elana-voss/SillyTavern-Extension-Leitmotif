@@ -1,29 +1,29 @@
-<div class="st-vibe-composer-settings">
+<div class="st-leitmotif-settings">
     <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
-            <b>MIDI Vibe Composer</b>
+            <b>Leitmotif</b>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content">
-            <label class="checkbox_label" for="st_vibe_composer_enabled">
-                <input id="st_vibe_composer_enabled" type="checkbox" />
+            <label class="checkbox_label" for="st_leitmotif_enabled">
+                <input id="st_leitmotif_enabled" type="checkbox" />
                 <span>Enable the chat toolbar button</span>
             </label>
-            <div class="st-vibe-composer-control">
+            <div class="st-leitmotif-control">
                 <b>Target length</b>
-                <div class="st-vibe-composer-length-options" role="group" aria-label="Approximate loop length">
-                    <button class="menu_button st-vibe-composer-length" type="button" data-seconds="15" aria-pressed="false">~15 sec</button>
-                    <button class="menu_button st-vibe-composer-length" type="button" data-seconds="30" aria-pressed="true">~30 sec</button>
-                    <button class="menu_button st-vibe-composer-length" type="button" data-seconds="60" aria-pressed="false">~1 min</button>
-                    <button class="menu_button st-vibe-composer-length" type="button" data-seconds="90" aria-pressed="false">~1.5 min</button>
-                    <button class="menu_button st-vibe-composer-length" type="button" data-seconds="120" aria-pressed="false">~2 min</button>
+                <div class="st-leitmotif-length-options" role="group" aria-label="Approximate loop length">
+                    <button class="menu_button st-leitmotif-length" type="button" data-seconds="15" aria-pressed="false">~15 sec</button>
+                    <button class="menu_button st-leitmotif-length" type="button" data-seconds="30" aria-pressed="true">~30 sec</button>
+                    <button class="menu_button st-leitmotif-length" type="button" data-seconds="60" aria-pressed="false">~1 min</button>
+                    <button class="menu_button st-leitmotif-length" type="button" data-seconds="90" aria-pressed="false">~1.5 min</button>
+                    <button class="menu_button st-leitmotif-length" type="button" data-seconds="120" aria-pressed="false">~2 min</button>
                 </div>
-                <small id="st_vibe_composer_length_estimate">About 30 seconds at the selected tempo</small>
+                <small id="st_leitmotif_length_estimate">About 30 seconds at the selected tempo</small>
             </div>
-            <label class="st-vibe-composer-control" for="st_vibe_composer_tempo">
-                <span><b>Tempo</b> <output id="st_vibe_composer_tempo_value" for="st_vibe_composer_tempo">74 BPM</output></span>
-                <input id="st_vibe_composer_tempo" type="range" min="65" max="85" step="1" value="74" list="st_vibe_composer_tempo_ticks" />
-                <datalist id="st_vibe_composer_tempo_ticks">
+            <label class="st-leitmotif-control" for="st_leitmotif_tempo">
+                <span><b>Tempo</b> <output id="st_leitmotif_tempo_value" for="st_leitmotif_tempo">74 BPM</output></span>
+                <input id="st_leitmotif_tempo" type="range" min="65" max="85" step="1" value="74" list="st_leitmotif_tempo_ticks" />
+                <datalist id="st_leitmotif_tempo_ticks">
                     <option value="65"></option>
                     <option value="70"></option>
                     <option value="75"></option>
@@ -32,19 +32,19 @@
                 </datalist>
             </label>
             <small>Themes play with sampled instruments in the browser and can also be downloaded as a MIDI file below.</small>
-            <div class="st-vibe-composer-control st-vibe-composer-instruments">
+            <div class="st-leitmotif-control st-leitmotif-instruments">
                 <b>Instrument choices</b>
-                <label for="st_vibe_composer_harmony">Harmony</label>
-                <select id="st_vibe_composer_harmony" class="text_pole st-vibe-composer-instrument" data-role="harmony"></select>
-                <label for="st_vibe_composer_bass">Bass</label>
-                <select id="st_vibe_composer_bass" class="text_pole st-vibe-composer-instrument" data-role="bass"></select>
-                <label for="st_vibe_composer_melody">Melody</label>
-                <select id="st_vibe_composer_melody" class="text_pole st-vibe-composer-instrument" data-role="melody"></select>
+                <label for="st_leitmotif_harmony">Harmony</label>
+                <select id="st_leitmotif_harmony" class="text_pole st-leitmotif-instrument" data-role="harmony"></select>
+                <label for="st_leitmotif_bass">Bass</label>
+                <select id="st_leitmotif_bass" class="text_pole st-leitmotif-instrument" data-role="bass"></select>
+                <label for="st_leitmotif_melody">Melody</label>
+                <select id="st_leitmotif_melody" class="text_pole st-leitmotif-instrument" data-role="melody"></select>
             </div>
-            <button id="st_vibe_composer_download" class="menu_button" type="button" disabled>
+            <button id="st_leitmotif_download" class="menu_button" type="button" disabled>
                 Download the generated theme as MIDI
             </button>
-            <div class="st-vibe-composer-status" role="status">Ready when a character chat is open.</div>
+            <div class="st-leitmotif-status" role="status">Ready when a character chat is open.</div>
             <small>
                 Generates a short character-inspired instrumental using the active
                 SillyTavern generation backend. Audio samples and MIDI libraries

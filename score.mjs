@@ -190,7 +190,7 @@ export function parseScore(response, {
 
         if (adjustedEvents.length > 0) {
             console.warn(
-                `[MidiVibeComposer] Adjusted note octaves for ${track.role} track ${index + 1} on ${adjustedEvents.length} event(s) to fit the track range.`,
+                `[Leitmotif] Adjusted note octaves for ${track.role} track ${index + 1} on ${adjustedEvents.length} event(s) to fit the track range.`,
                 adjustedEvents,
             );
         }

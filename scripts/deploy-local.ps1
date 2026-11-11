@@ -13,7 +13,7 @@ $sourceFiles = @(
     'settings.html',
     'style.css'
 )
-$destination = Join-Path $SillyTavernRoot 'public\scripts\extensions\third-party\SillyTavern-Extension-Midi'
+$destination = Join-Path $SillyTavernRoot 'public\scripts\extensions\third-party\SillyTavern-Extension-Leitmotif'
 
 if (-not (Test-Path -LiteralPath $SillyTavernRoot -PathType Container)) {
     throw "SillyTavern root was not found: $SillyTavernRoot"

@@ -1,13 +1,13 @@
-# MIDI Vibe Composer
+# Leitmotif
 
-A browser-side SillyTavern extension that generates an instrumental loop from the active character card, plays it with sampled instruments in the browser, and exports it as a MIDI file. Its score uses beat-timed events with chord support, rests, duration, and velocity across harmony, bass, and melody parts. Approximate loop duration (15 seconds to 2 minutes) and tempo (65–85 BPM) are configurable in the settings drawer. Generated event times are rounded to the nearest sixteenth-note and sorted before playback/export. Harmony supports notes from octaves 2–6 so lower chord extensions remain valid; velocity affects sampled playback gain and exported MIDI notes. Errors are logged to the browser console and shown through SillyTavern's error notification.
+A browser-side SillyTavern extension that composes a leitmotif — a short instrumental theme — for the active character card, plays it with sampled instruments in the browser, and exports it as a MIDI file. Its score uses beat-timed events with chord support, rests, duration, and velocity across harmony, bass, and melody parts. Approximate loop duration (15 seconds to 2 minutes) and tempo (65–85 BPM) are configurable in the settings drawer. Generated event times are rounded to the nearest sixteenth-note and sorted before playback/export. Harmony supports notes from octaves 2–6 so lower chord extensions remain valid; velocity affects sampled playback gain and exported MIDI notes. Errors are logged to the browser console and shown through SillyTavern's error notification.
 
 ## Install
 
 Install this repository through SillyTavern's **Extensions → Install Extension** flow, or place the repository in:
 
 ```text
-SillyTavern/public/scripts/extensions/third-party/SillyTavern-Extension-Midi
+SillyTavern/public/scripts/extensions/third-party/SillyTavern-Extension-Leitmotif
 ```
 
 For this Windows machine, run `.\scripts\deploy-local.ps1` from PowerShell to copy the extension files into the local SillyTavern checkout. To target a different checkout, pass its root with `-SillyTavernRoot`; use `-WhatIf` to preview the copy.

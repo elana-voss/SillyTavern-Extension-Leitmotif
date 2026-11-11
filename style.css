@@ -1,64 +1,64 @@
-.st-vibe-composer-settings small {
+.st-leitmotif-settings small {
     display: block;
     margin-top: 0.5em;
     opacity: 0.7;
 }
 
-.st-vibe-composer-settings #st_vibe_composer_download {
+.st-leitmotif-settings #st_leitmotif_download {
     margin-top: 0.5em;
 }
 
-.st-vibe-composer-settings .st-vibe-composer-control {
+.st-leitmotif-settings .st-leitmotif-control {
     display: block;
     margin-top: 0.75em;
 }
 
-.st-vibe-composer-length-options {
+.st-leitmotif-length-options {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4em;
     margin-top: 0.35em;
 }
 
-.st-vibe-composer-settings .st-vibe-composer-instruments label {
+.st-leitmotif-settings .st-leitmotif-instruments label {
     display: block;
     margin-top: 0.4em;
 }
 
-.st-vibe-composer-instruments select {
+.st-leitmotif-instruments select {
     display: block;
     width: 100%;
 }
 
-.st-vibe-composer-length-options .menu_button[aria-pressed="true"] {
+.st-leitmotif-length-options .menu_button[aria-pressed="true"] {
     border-color: var(--active);
     box-shadow: 0 0 0 1px var(--active);
 }
 
-#st_vibe_composer_tempo {
+#st_leitmotif_tempo {
     display: block;
     width: 100%;
 }
 
-.st-vibe-composer-settings #st_vibe_composer_download {
+.st-leitmotif-settings #st_leitmotif_download {
     display: block;
 }
 
-.st-vibe-composer-spinner {
+.st-leitmotif-spinner {
     display: inline-block;
     text-align: center;
     line-height: 1;
     transform-origin: 50% 50%;
-    animation: st-vibe-composer-spin 1s linear infinite;
+    animation: st-leitmotif-spin 1s linear infinite;
 }
 
-@keyframes st-vibe-composer-spin {
+@keyframes st-leitmotif-spin {
     to {
         transform: rotate(360deg);
     }
 }
 
-.st-vibe-composer-settings .st-vibe-composer-status {
+.st-leitmotif-settings .st-leitmotif-status {
     margin-top: 0.5em;
     opacity: 0.8;
 }
