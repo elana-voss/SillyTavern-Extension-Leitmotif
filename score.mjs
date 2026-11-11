@@ -132,7 +132,9 @@ export const INSTRUMENTS = Object.freeze({
     xylophone: 13,
 });
 
-export const REQUIRED_ROLES = Object.freeze(['harmony', 'bass', 'melody']);
+export const REQUIRED_ROLES = Object.freeze(['melody']);
+// Core parts: the score needs melody plus at least one of these, not necessarily both.
+export const CORE_ROLES = Object.freeze(['harmony', 'bass']);
 export const OPTIONAL_ROLES = Object.freeze(['counter', 'texture']);
 
 // Role guidance for the composer, not a restriction: any known instrument is
@@ -353,10 +355,13 @@ export function parseScore(response, {
         throw new Error(`Target tempo must be a whole number from ${MIN_TEMPO} to ${MAX_TEMPO} BPM.`);
     }
 
+    // 2 to 5 tracks: melody plus at least one core part (harmony or bass), optionally with counter and texture.
+    const minTracks = REQUIRED_ROLES.length + 1;
+    const maxTracks = REQUIRED_ROLES.length + CORE_ROLES.length + OPTIONAL_ROLES.length;
     if (!Array.isArray(value.tracks)
-        || value.tracks.length < REQUIRED_ROLES.length
-        || value.tracks.length > REQUIRED_ROLES.length + OPTIONAL_ROLES.length) {
-        throw new Error('The score must contain harmony, bass, and melody tracks, optionally with counter and texture tracks.');
+        || value.tracks.length < minTracks
+        || value.tracks.length > maxTracks) {
+        throw new Error(`The score must contain ${minTracks} to ${maxTracks} tracks: a melody track plus at least one of harmony or bass, optionally with counter and texture tracks.`);
     }
 
     const seenRoles = new Set();
@@ -458,8 +463,9 @@ export function parseScore(response, {
         };
     });
 
-    if (REQUIRED_ROLES.some(role => !seenRoles.has(role))) {
-        throw new Error('The score must contain harmony, bass, and melody tracks.');
+    if (REQUIRED_ROLES.some(role => !seenRoles.has(role))
+        || !CORE_ROLES.some(role => seenRoles.has(role))) {
+        throw new Error('The score must contain a melody track plus at least one of harmony or bass tracks.');
     }
 
     return {

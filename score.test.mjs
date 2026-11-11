@@ -220,11 +220,19 @@ test('rejects invalid tempo, missing role, or duplicate role', () => {
     assert.throws(() => parseScore({ ...validScore, tempo: 50 - 1 }), /tempo/);
     assert.ok(parseScore({ ...validScore, tempo: 50 }));
     assert.ok(parseScore({ ...validScore, tempo: 130 }));
-    assert.throws(() => parseScore({ ...validScore, tracks: validScore.tracks.slice(0, 2) }), /harmony, bass, and melody/);
+    assert.throws(() => parseScore({ ...validScore, tracks: validScore.tracks.slice(0, 2) }), /melody/);
     assert.throws(() => parseScore({
         ...validScore,
         tracks: [validScore.tracks[0], validScore.tracks[1], { ...validScore.tracks[2], role: 'bass', instrument: 'acoustic_bass' }],
     }), /can only appear once/);
+});
+
+test('accepts slim duo arrangements of melody plus one core part', () => {
+    const duoHarmony = parseScore({ ...validScore, tracks: [validScore.tracks[0], validScore.tracks[2]] });
+    assert.deepEqual(duoHarmony.tracks.map(track => track.role), ['harmony', 'melody']);
+    const duoBass = parseScore({ ...validScore, tracks: [validScore.tracks[1], validScore.tracks[2]] });
+    assert.deepEqual(duoBass.tracks.map(track => track.role), ['bass', 'melody']);
+    assert.throws(() => parseScore({ ...validScore, tracks: [validScore.tracks[2]] }), /2 to 5/);
 });
 
 test('accepts optional counter and texture tracks in 3/4 meter', () => {
