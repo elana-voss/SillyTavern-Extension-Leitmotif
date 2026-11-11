@@ -726,11 +726,12 @@ async function handleGenerateClick() {
             targetTempo: tempo,
         };
         let score;
+        let failureReason = '';
         for (let attempt = 0; attempt < 2; attempt += 1) {
             const response = await generateRaw({
                 prompt: attempt === 0
                     ? prompt
-                    : `${prompt}\n\nYour previous attempt was cut off or not valid JSON. Return a complete, compact score on one line: no markdown, no extra whitespace, and at most 3-6 events per track using longer sustained notes, so the JSON fits the response limit.`,
+                    : `${prompt}\n\nYour previous attempt failed: ${failureReason} Return a corrected score as one line of compact JSON: no markdown, no extra whitespace, at most 3-6 events per track with longer sustained notes, every beat inside the loop, and every bracket closed.`,
                 systemPrompt: 'You are a music composer. Return valid JSON only, following the requested score schema exactly.',
                 responseLength: Math.ceil((attempt === 0 ? 2400 : 3000) * bars / 4),
                 jsonSchema: {
@@ -745,12 +746,11 @@ async function handleGenerateClick() {
                 score = parseScore(response, parseOptions);
                 break;
             } catch (error) {
-                const isMalformedJson = error instanceof Error
-                    && (error.message.includes('invalid JSON') || error.message.includes('did not contain a JSON score'));
-                if (!isMalformedJson || attempt === 1) {
+                if (attempt === 1) {
                     throw error;
                 }
-                console.warn(LOG_TAG, 'The model returned malformed score JSON; retrying once.', error);
+                failureReason = error instanceof Error ? error.message : String(error);
+                console.warn(LOG_TAG, 'The generated score did not parse; retrying once with the error.', error);
             }
         }
 

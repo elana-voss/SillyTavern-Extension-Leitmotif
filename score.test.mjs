@@ -151,8 +151,8 @@ test('maps duration presets to the nearest whole-bar loop at the selected tempo'
     assert.throws(() => getLoopBars(30, 74, '5/4'), /Meter must be/);
 });
 
-test('rejects events that exceed the selected loop length', () => {
-    const tooLong = {
+test('wraps straying events across the loop seam and clamps their durations', () => {
+    const pastEnd = {
         ...validScore,
         tracks: validScore.tracks.map((track, index) => index === 1
             ? {
@@ -161,7 +161,24 @@ test('rejects events that exceed the selected loop length', () => {
             }
             : track),
     };
-    assert.throws(() => parseScore(tooLong, { loopBeats: 16 }), /sixteenth-note grid/);
+    assert.deepEqual(
+        parseScore(pastEnd, { loopBeats: 16 }).tracks[1].events.map(({ beat, duration }) => [beat, duration]),
+        [[0, 1]],
+    );
+
+    const pickup = {
+        ...validScore,
+        tracks: validScore.tracks.map((track, index) => index === 1
+            ? {
+                ...track,
+                events: [{ beat: -0.5, duration: 1, velocity: 80, notes: 'A1' }],
+            }
+            : track),
+    };
+    assert.deepEqual(
+        parseScore(pickup, { loopBeats: 16 }).tracks[1].events.map(({ beat, duration }) => [beat, duration]),
+        [[15.5, 0.5]],
+    );
 });
 
 test('supports the defined instruments and maps unknown ones per role', () => {
@@ -273,19 +290,36 @@ test('rejects duplicated optional roles and unsupported meters', () => {
     assert.ok(parseScore(validScore, { meter: '4/4', loopBeats: 16 }));
 });
 
-test('rejects invalid pitches, velocities, and chords with too many notes', () => {
-    const invalidCases = [
-        [1, { ...validScore.tracks[1].events[0], notes: 'H2' }],
-        [1, { ...validScore.tracks[1].events[0], velocity: 0 }],
-        [0, { ...validScore.tracks[0].events[0], notes: ['A3', 'C4', 'E4', 'G4', 'B4', 'D5'] }],
-    ];
-    for (const [roleIndex, event] of invalidCases) {
-        const tracks = validScore.tracks.map((track, index) => {
-            if (index !== roleIndex) return track;
-            return { ...track, events: [event, ...track.events.slice(1)] };
-        });
-        assert.throws(() => parseScore({ ...validScore, tracks }));
-    }
+test('repairs quoted numbers, stray velocities, and oversized chords', () => {
+    const quoted = validScore.tracks.map((track, index) => {
+        if (index !== 1) return track;
+        return {
+            ...track,
+            events: [{ ...track.events[0], beat: '0', duration: '1.5', velocity: '80' }, ...track.events.slice(1)],
+        };
+    });
+    assert.deepEqual(
+        parseScore({ ...validScore, tracks: quoted }).tracks[1].events[0],
+        { beat: 0, duration: 1.5, velocity: 80, notes: ['A1'] },
+    );
+
+    const quiet = validScore.tracks.map((track, index) => {
+        if (index !== 1) return track;
+        return { ...track, events: [{ ...track.events[0], velocity: 0 }, ...track.events.slice(1)] };
+    });
+    assert.equal(parseScore({ ...validScore, tracks: quiet }).tracks[1].events[0].velocity, 1);
+
+    const bigChord = validScore.tracks.map((track, index) => {
+        if (index !== 0) return track;
+        return {
+            ...track,
+            events: [{ ...track.events[0], notes: ['A3', 'C4', 'E4', 'G4', 'B4', 'D5'] }, ...track.events.slice(1)],
+        };
+    });
+    assert.deepEqual(
+        parseScore({ ...validScore, tracks: bigChord }).tracks[0].events[0].notes,
+        ['A3', 'C4', 'E4', 'G4', 'B4'],
+    );
 });
 
 test('quantizes and orders generated events on the sixteenth-note grid', () => {
@@ -307,18 +341,37 @@ test('quantizes and orders generated events on the sixteenth-note grid', () => {
     );
 });
 
-test('rejects events that remain invalid after grid normalization', () => {
+test('clamps overhanging durations and drops events without a usable beat', () => {
     const overhanging = validScore.tracks.map((track, index) =>
         index === 1
             ? { ...track, events: [{ ...track.events[0], beat: 15.75, duration: 0.5 }] }
             : track,
     );
-    assert.throws(() => parseScore({ ...validScore, tracks: overhanging }), /invalid duration/);
-
-    const outsideLoop = validScore.tracks.map((track, index) =>
-        index === 1 ? { ...track, events: [{ ...track.events[0], beat: 16 }] } : track,
+    assert.deepEqual(
+        parseScore({ ...validScore, tracks: overhanging }).tracks[1].events[0],
+        { beat: 15.75, duration: 0.25, velocity: 96, notes: ['A1'] },
     );
-    assert.throws(() => parseScore({ ...validScore, tracks: outsideLoop }), /sixteenth-note grid/);
+
+    const untimed = validScore.tracks.map((track, index) =>
+        index === 1
+            ? { ...track, events: [{ ...track.events[0], beat: 'after the downbeat' }, ...track.events.slice(1)] }
+            : track,
+    );
+    assert.equal(parseScore({ ...validScore, tracks: untimed }).tracks[1].events.length, 2);
+
+    const noteless = validScore.tracks.map((track, index) =>
+        index === 1
+            ? { ...track, events: [{ ...track.events[0], notes: 'H2' }, ...track.events.slice(1)] }
+            : track,
+    );
+    assert.equal(parseScore({ ...validScore, tracks: noteless }).tracks[1].events.length, 2);
+
+    const empty = validScore.tracks.map((track, index) =>
+        index === 1
+            ? { ...track, events: [{ ...track.events[0], beat: null, notes: 'H2' }] }
+            : track,
+    );
+    assert.throws(() => parseScore({ ...validScore, tracks: empty }), /no usable events/);
 });
 
 test('orders unsorted track events by their normalized beat', () => {

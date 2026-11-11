@@ -169,12 +169,18 @@ export function getApproximateDuration(bars, tempo, meter = '4/4') {
     return Math.round(bars * getBeatsPerBar(meter) * 60 / tempo);
 }
 
-function isOnBeatGrid(value) {
-    return Math.abs(value / BEAT_GRID - Math.round(value / BEAT_GRID)) < 1e-8;
-}
-
 function quantizeToBeatGrid(value) {
     return Math.round(value / BEAT_GRID) * BEAT_GRID;
+}
+
+// Accepts quoted numbers from sloppy model output; null when unusable.
+function normalizeNumber(value) {
+    const candidate = typeof value === 'string' ? value.trim() : value;
+    if (candidate === null || candidate === undefined || candidate === '') {
+        return null;
+    }
+    const number = Number(candidate);
+    return Number.isFinite(number) ? number : null;
 }
 
 function normalizeNoteOctave(note, role) {
@@ -279,51 +285,42 @@ export function parseScore(response, {
             throw new Error(`Track ${index + 1} must contain 1 to ${loopBeats * 3} timed events.`);
         }
 
-        let previousBeat = -1;
+        // Events are normalized fail-soft: model slips are repaired or dropped
+        // with a warning (strays across the loop seam, quoted numbers, odd note
+        // names) so one bad event can never kill a whole generation. Only a
+        // track without any usable event left is an error.
         const adjustedEvents = [];
-        const events = [...track.events]
-            .sort((left, right) => {
-                if (!Number.isFinite(left?.beat) || !Number.isFinite(right?.beat)) {
-                    return 0;
-                }
-                return quantizeToBeatGrid(left.beat) - quantizeToBeatGrid(right.beat);
-            })
+        const events = track.events
             .map((event, eventIndex) => {
                 if (!event || typeof event !== 'object' || Array.isArray(event)) {
                     throw new Error(`Track ${index + 1}, event ${eventIndex + 1} must be an object.`);
                 }
 
-                const beat = Number.isFinite(event.beat) ? quantizeToBeatGrid(event.beat) : event.beat;
-                const duration = Number.isFinite(event.duration) ? quantizeToBeatGrid(event.duration) : event.duration;
-                const { velocity } = event;
-                if (!Number.isFinite(beat)
-                    || beat < 0
-                    || beat >= loopBeats
-                    || !isOnBeatGrid(beat)
-                    || beat < previousBeat) {
-                    throw new Error(`Track ${index + 1} events must be ordered on the sixteenth-note grid within the loop.`);
+                const rawBeat = normalizeNumber(event.beat);
+                if (rawBeat === null) {
+                    console.warn(`[Leitmotif] Track ${index + 1}, event ${eventIndex + 1} has no usable beat; dropped the event.`);
+                    return null;
                 }
-                previousBeat = beat;
+                // A loop's seam joins its end to its start, so a beat just past
+                // either edge belongs on the other side of the seam: wrap it.
+                const beat = quantizeToBeatGrid(((quantizeToBeatGrid(rawBeat) % loopBeats) + loopBeats) % loopBeats);
+                const rawDuration = normalizeNumber(event.duration) ?? 1;
+                const duration = Math.min(quantizeToBeatGrid(Math.max(rawDuration, BEAT_GRID)), loopBeats - beat);
+                const velocity = Math.min(127, Math.max(1, Math.round(normalizeNumber(event.velocity) ?? 100)));
 
-                if (!Number.isFinite(duration)
-                    || duration < BEAT_GRID
-                    || !isOnBeatGrid(duration)
-                    || beat + duration > loopBeats) {
-                    throw new Error(`Track ${index + 1}, event ${eventIndex + 1} has an invalid duration.`);
+                const rawNotes = typeof event.notes === 'string' ? [event.notes] : event.notes;
+                const usableNotes = (Array.isArray(rawNotes) ? rawNotes : [])
+                    .filter(note => typeof note === 'string')
+                    .map(note => note.trim().replace(/^([a-g])/, letter => letter.toUpperCase()))
+                    .filter(note => NOTE_PATTERN.test(note));
+                if (usableNotes.length === 0) {
+                    console.warn(`[Leitmotif] Track ${index + 1}, event ${eventIndex + 1} has no usable notes; dropped the event.`);
+                    return null;
                 }
-
-                if (!Number.isInteger(velocity) || velocity < 1 || velocity > 127) {
-                    throw new Error(`Track ${index + 1}, event ${eventIndex + 1} velocity must be an integer from 1 to 127.`);
+                if (usableNotes.length > MAX_NOTES_PER_EVENT) {
+                    console.warn(`[Leitmotif] Track ${index + 1}, event ${eventIndex + 1} named ${usableNotes.length} notes; kept the first ${MAX_NOTES_PER_EVENT}.`);
                 }
-
-                const pitches = typeof event.notes === 'string' ? [event.notes] : event.notes;
-                if (!Array.isArray(pitches)
-                    || pitches.length < 1
-                    || pitches.length > MAX_NOTES_PER_EVENT
-                    || !pitches.every(note => typeof note === 'string' && NOTE_PATTERN.test(note))) {
-                    throw new Error(`Track ${index + 1}, event ${eventIndex + 1} contains invalid notes.`);
-                }
-
+                const pitches = usableNotes.slice(0, MAX_NOTES_PER_EVENT);
                 const transposedPitches = pitches.map(note => normalizeNoteOctave(note, track.role));
                 const normalizedPitches = [...new Set(transposedPitches)];
                 if (transposedPitches.some((note, noteIndex) => note !== pitches[noteIndex])) {
@@ -335,7 +332,13 @@ export function parseScore(response, {
                 }
 
                 return { beat, duration, velocity, notes: normalizedPitches };
-            });
+            })
+            .filter(Boolean)
+            .sort((left, right) => left.beat - right.beat);
+
+        if (events.length === 0) {
+            throw new Error(`Track ${index + 1} has no usable events.`);
+        }
 
         if (adjustedEvents.length > 0) {
             console.warn(
