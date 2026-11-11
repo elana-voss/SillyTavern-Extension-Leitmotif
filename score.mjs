@@ -1,28 +1,48 @@
 export const INSTRUMENTS = Object.freeze({
     acoustic_bass: 32,
     acoustic_grand_piano: 0,
+    electric_bass_finger: 33,
     electric_piano_1: 4,
+    flute: 73,
     pad_2_warm: 89,
+    vibraphone: 11,
 });
 
 export const TRACK_ROLES = Object.freeze({
-    harmony: ['electric_piano_1', 'pad_2_warm'],
-    bass: ['acoustic_bass'],
-    melody: ['acoustic_grand_piano', 'electric_piano_1'],
+    harmony: ['electric_piano_1', 'pad_2_warm', 'acoustic_grand_piano', 'vibraphone'],
+    bass: ['acoustic_bass', 'electric_bass_finger'],
+    melody: ['acoustic_grand_piano', 'electric_piano_1', 'vibraphone', 'flute'],
 });
 
 const NOTE_PATTERN = /^[A-G](?:#|b)?[1-6]$/;
-const LOOP_LENGTHS = [16, 32, 64];
 const BEAT_GRID = 0.25;
 const MAX_NOTES_PER_EVENT = 5;
+
+export function getLoopBars(lengthSeconds, tempo) {
+    if (![15, 30, 60, 90, 120].includes(lengthSeconds)) {
+        throw new Error('Loop duration must be one of the available presets.');
+    }
+    if (!Number.isInteger(tempo) || tempo < 65 || tempo > 85) {
+        throw new Error('Tempo must be a whole number from 65 to 85 BPM.');
+    }
+    return Math.max(4, Math.round(lengthSeconds * tempo / 240));
+}
+
+export function getApproximateDuration(bars, tempo) {
+    return Math.round(bars * 4 * 60 / tempo);
+}
 
 function isOnBeatGrid(value) {
     return Math.abs(value / BEAT_GRID - Math.round(value / BEAT_GRID)) < 1e-8;
 }
 
-export function parseScore(response, { loopBeats = 16, targetTempo } = {}) {
-    if (!LOOP_LENGTHS.includes(loopBeats)) {
-        throw new Error('Loop length must be 4, 8, or 16 bars.');
+export function parseScore(response, {
+    loopBeats = 16,
+    targetTempo,
+    instrumentOptions = TRACK_ROLES,
+} = {}) {
+    if (!Number.isInteger(loopBeats) || loopBeats < 16 || loopBeats > 176 || loopBeats % 4 !== 0) {
+        throw new Error('Loop length must be a whole number of bars from 4 to 44.');
     }
 
     let value = response;
@@ -77,7 +97,14 @@ export function parseScore(response, { loopBeats = 16, targetTempo } = {}) {
         }
         seenRoles.add(track.role);
 
-        if (!TRACK_ROLES[track.role].includes(track.instrument)) {
+        const allowedInstruments = instrumentOptions[track.role];
+        if (!Array.isArray(allowedInstruments)
+            || allowedInstruments.length === 0
+            || !allowedInstruments.every(instrument => TRACK_ROLES[track.role].includes(instrument))) {
+            throw new Error(`Track ${index + 1} has no valid instruments configured for its role.`);
+        }
+
+        if (!allowedInstruments.includes(track.instrument)) {
             throw new Error(`Track ${index + 1} uses an instrument that does not match its role.`);
         }
 

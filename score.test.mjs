@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { INSTRUMENTS, parseScore, TRACK_ROLES } from './score.mjs';
+import {
+    getApproximateDuration,
+    getLoopBars,
+    INSTRUMENTS,
+    parseScore,
+    TRACK_ROLES,
+} from './score.mjs';
 
 const validScore = {
     tempo: 72,
@@ -97,6 +103,36 @@ test('accepts events through the end of a selected 16-bar loop', () => {
     assert.equal(parsed.tracks[1].events[0].beat + parsed.tracks[1].events[0].duration, 64);
 });
 
+test('accepts the 120-second preset at the highest supported tempo', () => {
+    const bars = getLoopBars(120, 85);
+    assert.equal(bars, 43);
+    const longScore = {
+        ...validScore,
+        tracks: validScore.tracks.map((track, index) => index === 1
+            ? {
+                ...track,
+                events: [{ beat: bars * 4 - 1, duration: 1, velocity: 80, notes: 'A1' }],
+            }
+            : track),
+    };
+    const parsed = parseScore(longScore, { loopBeats: bars * 4, targetTempo: 85 });
+    assert.equal(parsed.loopBeats, 172);
+    assert.equal(getApproximateDuration(bars, 85), 121);
+});
+
+test('maps duration presets to the nearest whole-bar loop at the selected tempo', () => {
+    for (const seconds of [15, 30, 60, 90, 120]) {
+        for (const tempo of [65, 74, 85]) {
+            const bars = getLoopBars(seconds, tempo);
+            assert.ok(bars >= 4);
+            assert.ok(bars <= 44);
+            assert.ok(Math.abs(getApproximateDuration(bars, tempo) - seconds) <= 2);
+        }
+    }
+    assert.throws(() => getLoopBars(45, 74), /available presets/);
+    assert.throws(() => getLoopBars(30, 100), /65 to 85/);
+});
+
 test('rejects events that exceed the selected loop length', () => {
     const tooLong = {
         ...validScore,
@@ -114,8 +150,11 @@ test('supports the defined instruments and role-compatible patches', () => {
     assert.deepEqual(Object.keys(INSTRUMENTS), [
         'acoustic_bass',
         'acoustic_grand_piano',
+        'electric_bass_finger',
         'electric_piano_1',
+        'flute',
         'pad_2_warm',
+        'vibraphone',
     ]);
     assert.deepEqual(Object.keys(TRACK_ROLES), ['harmony', 'bass', 'melody']);
     assert.throws(() => parseScore({
@@ -124,6 +163,13 @@ test('supports the defined instruments and role-compatible patches', () => {
             index === 0 ? { ...track, instrument: 'pad_4_warm' } : track,
         ),
     }), /instrument that does not match/);
+    assert.deepEqual(parseScore(validScore, {
+        instrumentOptions: {
+            harmony: ['pad_2_warm'],
+            bass: ['acoustic_bass'],
+            melody: ['acoustic_grand_piano'],
+        },
+    }).tracks.map(track => track.instrument), ['pad_2_warm', 'acoustic_bass', 'acoustic_grand_piano']);
 });
 
 test('rejects invalid tempo, missing role, or duplicate role', () => {

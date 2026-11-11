@@ -10,12 +10,15 @@
                 <span>Enable the chat toolbar button</span>
             </label>
             <div class="st-vibe-composer-control">
-                <b>Loop length</b>
-                <div class="st-vibe-composer-length-options" role="group" aria-label="Loop length in bars">
-                    <button class="menu_button st-vibe-composer-length" type="button" data-bars="4" aria-pressed="true">4 bars</button>
-                    <button class="menu_button st-vibe-composer-length" type="button" data-bars="8" aria-pressed="false">8 bars</button>
-                    <button class="menu_button st-vibe-composer-length" type="button" data-bars="16" aria-pressed="false">16 bars</button>
+                <b>Target length</b>
+                <div class="st-vibe-composer-length-options" role="group" aria-label="Approximate loop length">
+                    <button class="menu_button st-vibe-composer-length" type="button" data-seconds="15" aria-pressed="false">~15 sec</button>
+                    <button class="menu_button st-vibe-composer-length" type="button" data-seconds="30" aria-pressed="true">~30 sec</button>
+                    <button class="menu_button st-vibe-composer-length" type="button" data-seconds="60" aria-pressed="false">~1 min</button>
+                    <button class="menu_button st-vibe-composer-length" type="button" data-seconds="90" aria-pressed="false">~1.5 min</button>
+                    <button class="menu_button st-vibe-composer-length" type="button" data-seconds="120" aria-pressed="false">~2 min</button>
                 </div>
+                <small id="st_vibe_composer_length_estimate">About 30 seconds at the selected tempo</small>
             </div>
             <label class="st-vibe-composer-control" for="st_vibe_composer_tempo">
                 <span><b>Tempo</b> <output id="st_vibe_composer_tempo_value" for="st_vibe_composer_tempo">74 BPM</output></span>
@@ -28,6 +31,23 @@
                     <option value="85"></option>
                 </datalist>
             </label>
+            <div class="st-vibe-composer-control">
+                <b>Playback</b>
+                <div class="st-vibe-composer-mode-options" role="group" aria-label="Playback mode">
+                    <button class="menu_button st-vibe-composer-mode" type="button" data-mode="soundfont" aria-pressed="true">Sampled preview</button>
+                    <button class="menu_button st-vibe-composer-mode" type="button" data-mode="midi" aria-pressed="false">MIDI only</button>
+                </div>
+                <small>Both modes generate a downloadable MIDI file. Sampled preview also plays it in the browser.</small>
+            </div>
+            <div class="st-vibe-composer-control st-vibe-composer-instruments">
+                <b>Instrument choices</b>
+                <label for="st_vibe_composer_harmony">Harmony</label>
+                <select id="st_vibe_composer_harmony" class="text_pole st-vibe-composer-instrument" data-role="harmony"></select>
+                <label for="st_vibe_composer_bass">Bass</label>
+                <select id="st_vibe_composer_bass" class="text_pole st-vibe-composer-instrument" data-role="bass"></select>
+                <label for="st_vibe_composer_melody">Melody</label>
+                <select id="st_vibe_composer_melody" class="text_pole st-vibe-composer-instrument" data-role="melody"></select>
+            </div>
             <button id="st_vibe_composer_download" class="menu_button" type="button" disabled>
                 Download the generated theme as MIDI
             </button>

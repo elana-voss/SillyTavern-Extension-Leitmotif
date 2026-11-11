@@ -1,6 +1,6 @@
 # MIDI Vibe Composer
 
-A browser-side SillyTavern extension that generates an instrumental loop from the active character card, plays it with sampled instruments, and exports it as a MIDI file. Its score uses beat-timed events with chord support, rests, duration, and velocity across harmony, bass, and melody parts. Loop length (4, 8, or 16 bars) and tempo (65–85 BPM) are configurable in the settings drawer. Harmony supports notes from octaves 2–6 so lower chord extensions remain valid; velocity affects sampled playback gain and exported MIDI notes. Errors are logged to the browser console and remain visible in the settings status.
+A browser-side SillyTavern extension that generates an instrumental loop from the active character card, plays it with sampled instruments, and exports it as a MIDI file. Its score uses beat-timed events with chord support, rests, duration, and velocity across harmony, bass, and melody parts. Approximate loop duration (15 seconds to 2 minutes) and tempo (65–85 BPM) are configurable in the settings drawer. Harmony supports notes from octaves 2–6 so lower chord extensions remain valid; velocity affects sampled playback gain and exported MIDI notes. Errors are logged to the browser console and remain visible in the settings status.
 
 ## Install
 
@@ -14,7 +14,7 @@ For this Windows machine, run `.\scripts\deploy-local.ps1` from PowerShell to co
 
 Reload SillyTavern, open an individual character chat, and use the music icon beside the chat input. The first generation uses SillyTavern's currently selected generation backend. Audio samples and the MIDI writer are loaded from pinned unpkg URLs on demand; an internet connection is needed for those libraries and samples.
 
-The single toolbar button shows a spinner while generating, changes to a stop button during playback, and returns to the music icon when stopped. The generated theme loops until stopped. Use the MIDI Vibe Composer settings drawer to select length and tempo or download the current composition as a `.mid` file. Character description, personality, scenario, and first message are sent in separate XML-style sections.
+The single toolbar button shows a spinner while generating, changes to a stop button during sampled playback, and returns to the music icon when stopped. Choose **Sampled preview** to hear the theme in the browser or **MIDI only** to skip browser audio; both modes generate the same downloadable MIDI. The sampled preview uses a master compressor to reduce clipping when chords and tracks overlap. The length presets target 15 seconds, 30 seconds, 1 minute, 1.5 minutes, or 2 minutes; actual duration is rounded to a whole number of 4/4 bars at the selected tempo. In each track's instrument setting, **Let the AI choose** allows a character-suitable timbre from the available samples; a specific instrument can also be selected. Character description, personality, scenario, and first message are sent in separate XML-style sections.
 
 ## Verify
 

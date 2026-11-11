@@ -15,11 +15,34 @@
 
 .st-vibe-composer-length-options {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.4em;
     margin-top: 0.35em;
 }
 
+.st-vibe-composer-mode-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em;
+    margin-top: 0.35em;
+}
+
+.st-vibe-composer-settings .st-vibe-composer-instruments label {
+    display: block;
+    margin-top: 0.4em;
+}
+
+.st-vibe-composer-instruments select {
+    display: block;
+    width: 100%;
+}
+
 .st-vibe-composer-length-options .menu_button[aria-pressed="true"] {
+    border-color: var(--active);
+    box-shadow: 0 0 0 1px var(--active);
+}
+
+.st-vibe-composer-mode-options .menu_button[aria-pressed="true"] {
     border-color: var(--active);
     box-shadow: 0 0 0 1px var(--active);
 }
@@ -50,8 +73,18 @@
 }
 
 .st-vibe-composer-toolbar-button:disabled {
-    cursor: wait;
     opacity: 0.45;
+}
+
+.st-vibe-composer-spinner {
+    display: inline-block;
+    animation: st-vibe-composer-spin 1s linear infinite;
+}
+
+@keyframes st-vibe-composer-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .st-vibe-composer-settings .st-vibe-composer-status {
