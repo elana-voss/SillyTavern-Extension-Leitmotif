@@ -7,7 +7,6 @@ import {
 import {
     getApproximateDuration,
     getLoopBars,
-    INSTRUMENTS,
     METERS,
     parseScore,
     SCORE_JSON_SCHEMA,
@@ -36,7 +35,6 @@ const DEFAULT_SETTINGS = {
     tempo: 74,
     characterTempo: false,
     variety: 'standard',
-    instruments: { harmony: 'auto', bass: 'auto', melody: 'auto' },
 };
 
 const INSTRUMENT_LABELS = {
@@ -125,9 +123,10 @@ function loadSettings() {
         DEFAULT_SETTINGS,
         extension_settings[MODULE] ?? {},
     );
-    // Remove settings from the removed MIDI playback mode.
+    // Remove settings from the removed MIDI playback mode and instrument pins.
     delete extension_settings[MODULE].playbackMode;
     delete extension_settings[MODULE].midiOutput;
+    delete extension_settings[MODULE].instruments;
     if (!AVAILABLE_LENGTHS_SECONDS.includes(extension_settings[MODULE].lengthSeconds)) {
         extension_settings[MODULE].lengthSeconds = DEFAULT_SETTINGS.lengthSeconds;
     }
@@ -140,12 +139,6 @@ function loadSettings() {
     if (!VARIETY_LEVELS.includes(extension_settings[MODULE].variety)) {
         extension_settings[MODULE].variety = DEFAULT_SETTINGS.variety;
     }
-    extension_settings[MODULE].instruments = Object.fromEntries(
-        Object.entries(TRACK_ROLES).map(([role, options]) => {
-            const selected = extension_settings[MODULE].instruments?.[role] ?? 'auto';
-            return [role, selected === 'auto' || options.includes(selected) ? selected : 'auto'];
-        }),
-    );
 }
 
 function updateLengthEstimate() {
@@ -436,16 +429,13 @@ function getCharacterPrompt(character, {
     loopBeats,
     tempo,
     meter,
-    instrumentPreferences,
     varietySeed,
 }) {
-    const instrumentChoices = Object.fromEntries(
-        Object.entries(TRACK_ROLES).map(([role, options]) => {
-            const preference = instrumentPreferences[role];
-            const choices = (preference && preference !== 'auto') ? [preference] : options;
-            return [role, choices];
-        }),
-    );
+    // The palette is timbre guidance only: instruments are chosen fresh each
+    // generation from the brief, never pinned in the settings.
+    const instrumentLine = Object.entries(TRACK_ROLES)
+        .map(([role, options]) => `${role}: ${options.map(instrument => `${instrument} (${INSTRUMENT_LABELS[instrument]})`).join(', ')}`)
+        .join('; ');
     const briefSection = musicBriefToPromptSection(brief)
         || '<music_brief>none — infer this character\'s musical identity from the profile yourself, and make it unmistakable.</music_brief>';
     const seedSection = varietySeed
@@ -461,7 +451,7 @@ Return only a JSON object with this exact shape:
 
 Requirements:
 - Set the tempo to exactly ${tempo} BPM and the meter to exactly "${meter}". Compose a ${bars}-bar ${meter} loop lasting exactly ${loopBeats} beats.
-- Tracks: harmony, bass, and melody are required. counter (answering line) and texture (sustained layer or ostinato) are optional; include them only when the brief benefits from the extra layer (3 to 5 tracks total). Select one instrument per role from these allowed choices: ${Object.entries(instrumentChoices).map(([role, choices]) => `${role}: ${choices.map(instrument => `${instrument} (${INSTRUMENT_LABELS[instrument]})`).join(', ')}`).join('; ')}. The brief's timbre hints decide among listed choices; a single listed choice is fixed.
+- Tracks: harmony, bass, and melody are required. counter (answering line) and texture (sustained layer or ostinato) are optional; include them only when the brief benefits from the extra layer (3 to 5 tracks total). Pick one instrument per role from these timbre options: ${instrumentLine}. Let the brief's timbre hints decide among them.
 - Each track has an "events" array. Each event has "beat" (start position from 0 to just before ${loopBeats}), "duration" (in beats), "velocity" (integer from 1 to 127), and "notes" (one note name or an array of simultaneous note names). The example is abbreviated; compose enough events to develop the full arrangement.
 - Place events on a sixteenth-note grid, where beat positions advance in steps of 0.25. Use appropriate note durations and overlapping sustained layers so rests feel intentional rather than leaving accidental gaps. Durations must fit within the loop.
 - Use note names such as C4, F#3, or Bb4. Octaves: bass strictly 1-2 (bass in octave 3 or higher is wrong; write D2 or E2, not D3 or E3); harmony 2-6; melody 3-6; counter 3-6; texture 2-6. Chords may contain up to five notes.
@@ -712,7 +702,6 @@ async function handleGenerateClick() {
 
     try {
         const character = getActiveCharacter();
-        const instrumentPreferences = extension_settings[MODULE].instruments;
         currentCharacterName = character.name;
         const brief = await analyzeCharacter(character);
         const tempo = extension_settings[MODULE].characterTempo && brief?.tempo
@@ -729,28 +718,21 @@ async function handleGenerateClick() {
             loopBeats,
             tempo,
             meter,
-            instrumentPreferences,
             varietySeed,
         });
         const parseOptions = {
             loopBeats,
             meter,
             targetTempo: tempo,
-            instrumentOptions: Object.fromEntries(
-                Object.entries(TRACK_ROLES).map(([role, options]) => [
-                    role,
-                    instrumentPreferences[role] === 'auto' ? options : [instrumentPreferences[role]],
-                ]),
-            ),
         };
         let score;
         for (let attempt = 0; attempt < 2; attempt += 1) {
             const response = await generateRaw({
                 prompt: attempt === 0
                     ? prompt
-                    : `${prompt}\n\nYour previous attempt was not valid JSON. Return a complete, compact score object only. Do not use markdown or omit closing brackets.`,
+                    : `${prompt}\n\nYour previous attempt was cut off or not valid JSON. Return a complete, compact score on one line: no markdown, no extra whitespace, and at most 3-6 events per track using longer sustained notes, so the JSON fits the response limit.`,
                 systemPrompt: 'You are a music composer. Return valid JSON only, following the requested score schema exactly.',
-                responseLength: Math.ceil((attempt === 0 ? 1200 : 2000) * bars / 4),
+                responseLength: Math.ceil((attempt === 0 ? 2400 : 3000) * bars / 4),
                 jsonSchema: {
                     name: 'leitmotif_score',
                     description: 'Looping character theme score with timed events.',
@@ -876,21 +858,6 @@ function bindSettings() {
             extension_settings[MODULE].variety = $(this).val();
             saveSettingsDebounced();
         });
-
-    $('.st-leitmotif-instrument').each(function () {
-        const role = $(this).attr('data-role');
-        const options = TRACK_ROLES[role];
-        $(this).append(new Option('Let the AI choose', 'auto'));
-        for (const instrument of options) {
-            $(this).append(new Option(INSTRUMENT_LABELS[instrument], instrument));
-        }
-        $(this)
-            .val(extension_settings[MODULE].instruments[role])
-            .on('change', function () {
-                extension_settings[MODULE].instruments[role] = $(this).val();
-                saveSettingsDebounced();
-            });
-    });
 
     $('.st-leitmotif-length').each(function () {
         const selected = Number($(this).attr('data-seconds')) === extension_settings[MODULE].lengthSeconds;

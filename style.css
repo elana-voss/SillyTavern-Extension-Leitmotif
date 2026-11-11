@@ -20,16 +20,6 @@
     margin-top: 0.35em;
 }
 
-.st-leitmotif-settings .st-leitmotif-instruments label {
-    display: block;
-    margin-top: 0.4em;
-}
-
-.st-leitmotif-instruments select {
-    display: block;
-    width: 100%;
-}
-
 .st-leitmotif-brief #st_leitmotif_brief_body {
     margin-top: 0.5em;
     white-space: pre-line;

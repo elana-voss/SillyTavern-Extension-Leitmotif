@@ -164,7 +164,7 @@ test('rejects events that exceed the selected loop length', () => {
     assert.throws(() => parseScore(tooLong, { loopBeats: 16 }), /sixteenth-note grid/);
 });
 
-test('supports the defined instruments and role-compatible patches', () => {
+test('supports the defined instruments and maps unknown ones per role', () => {
     assert.deepEqual(Object.keys(INSTRUMENTS), [
         'acoustic_bass',
         'acoustic_grand_piano',
@@ -197,19 +197,22 @@ test('supports the defined instruments and role-compatible patches', () => {
         'voice_oohs',
     ]);
     assert.deepEqual(Object.keys(TRACK_ROLES), ['harmony', 'bass', 'melody', 'counter', 'texture']);
-    assert.throws(() => parseScore({
+    // Any known instrument is accepted on any role: the model chooses the timbre.
+    const mixed = parseScore({
+        ...validScore,
+        tracks: validScore.tracks.map((track, index) =>
+            index === 0 ? { ...track, instrument: 'flute' } : track,
+        ),
+    });
+    assert.equal(mixed.tracks[0].instrument, 'flute');
+    // An unknown instrument falls back to the role's palette instead of failing.
+    const mapped = parseScore({
         ...validScore,
         tracks: validScore.tracks.map((track, index) =>
             index === 0 ? { ...track, instrument: 'pad_4_warm' } : track,
         ),
-    }), /instrument that does not match/);
-    assert.deepEqual(parseScore(validScore, {
-        instrumentOptions: {
-            harmony: ['pad_2_warm'],
-            bass: ['acoustic_bass'],
-            melody: ['acoustic_grand_piano'],
-        },
-    }).tracks.map(track => track.instrument), ['pad_2_warm', 'acoustic_bass', 'acoustic_grand_piano']);
+    });
+    assert.equal(mapped.tracks[0].instrument, TRACK_ROLES.harmony[0]);
 });
 
 test('rejects invalid tempo, missing role, or duplicate role', () => {

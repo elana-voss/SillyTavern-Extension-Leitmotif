@@ -193,7 +193,6 @@ export function parseScore(response, {
     loopBeats = 16,
     meter = '4/4',
     targetTempo,
-    instrumentOptions = TRACK_ROLES,
 } = {}) {
     const beatsPerBar = getBeatsPerBar(meter);
 
@@ -264,15 +263,14 @@ export function parseScore(response, {
         }
         seenRoles.add(track.role);
 
-        const allowedInstruments = instrumentOptions[track.role];
-        if (!Array.isArray(allowedInstruments)
-            || allowedInstruments.length === 0
-            || !allowedInstruments.every(instrument => TRACK_ROLES[track.role].includes(instrument))) {
-            throw new Error(`Track ${index + 1} has no valid instruments configured for its role.`);
-        }
-
-        if (!allowedInstruments.includes(track.instrument)) {
-            throw new Error(`Track ${index + 1} uses an instrument that does not match its role.`);
+        // Instruments are chosen by the model per generation: any known patch
+        // is valid on any role (the role only fixes the octave range). A
+        // hallucinated instrument falls back to the role's first palette
+        // entry so a naming slip can never fail the generation.
+        let instrument = track.instrument;
+        if (!Object.hasOwn(INSTRUMENTS, instrument)) {
+            instrument = TRACK_ROLES[track.role][0];
+            console.warn(`[Leitmotif] Track ${index + 1} named an unknown instrument; using ${instrument} instead.`);
         }
 
         if (!Array.isArray(track.events)
@@ -348,7 +346,7 @@ export function parseScore(response, {
 
         return {
             role: track.role,
-            instrument: track.instrument,
+            instrument,
             events,
         };
     });
