@@ -131,6 +131,7 @@ export function parseScore(response, {
         }
 
         let previousBeat = -1;
+        const adjustedEvents = [];
         const events = [...track.events]
             .sort((left, right) => {
                 if (!Number.isFinite(left?.beat) || !Number.isFinite(right?.beat)) {
@@ -177,14 +178,22 @@ export function parseScore(response, {
                 const transposedPitches = pitches.map(note => normalizeNoteOctave(note, track.role));
                 const normalizedPitches = [...new Set(transposedPitches)];
                 if (transposedPitches.some((note, noteIndex) => note !== pitches[noteIndex])) {
-                    console.warn(
-                        `[MidiVibeComposer] Adjusted note octaves for ${track.role} track ${index + 1}, event ${eventIndex + 1}.`,
-                        { original: pitches, normalized: transposedPitches },
-                    );
+                    adjustedEvents.push({
+                        event: eventIndex + 1,
+                        original: pitches,
+                        normalized: transposedPitches,
+                    });
                 }
 
                 return { beat, duration, velocity, notes: normalizedPitches };
             });
+
+        if (adjustedEvents.length > 0) {
+            console.warn(
+                `[MidiVibeComposer] Adjusted note octaves for ${track.role} track ${index + 1} on ${adjustedEvents.length} event(s) to fit the track range.`,
+                adjustedEvents,
+            );
+        }
 
         return {
             role: track.role,

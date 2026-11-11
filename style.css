@@ -58,6 +58,9 @@
 
 .st-vibe-composer-spinner {
     display: inline-block;
+    text-align: center;
+    line-height: 1;
+    transform-origin: 50% 50%;
     animation: st-vibe-composer-spin 1s linear infinite;
 }
 

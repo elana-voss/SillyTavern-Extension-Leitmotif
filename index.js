@@ -139,7 +139,7 @@ function loadMidiAccess() {
         return Promise.reject(new Error('This browser does not support the Web MIDI API.'));
     }
     if (!midiAccessPromise) {
-        midiAccessPromise = navigator.requestMIDIAccess({ sysex: false })
+        midiAccessPromise = navigator.requestMIDIAccess({ sysex: false, software: true })
             .then(access => {
                 midiAccess = access;
                 access.onstatechange = () => {
@@ -163,29 +163,33 @@ function listMidiOutputs(access) {
 
 function pickMidiOutput(access, updateOptions = false) {
     const outputs = listMidiOutputs(access);
-    if (outputs.length === 0) {
-        midiOutput = undefined;
-        return null;
-    }
     const savedId = extension_settings[MODULE].midiOutput;
-    const chosen = outputs.find(output => output.id === savedId) ?? outputs[0];
-    midiOutput = access.outputs.get(chosen.id);
+    const chosen = outputs.find(output => output.id === savedId) ?? outputs[0] ?? null;
+    midiOutput = chosen ? access.outputs.get(chosen.id) : undefined;
     if (updateOptions) {
-        refreshMidiOutputOptions(outputs, chosen.id);
+        refreshMidiOutputOptions(outputs, chosen?.id ?? '', 'No MIDI output found');
     }
     return chosen;
 }
 
-function refreshMidiOutputOptions(outputs, chosenId) {
+function refreshMidiOutputOptions(outputs, chosenId, emptyHint = 'No MIDI output found') {
     const select = document.getElementById('st_vibe_composer_midi_output');
     if (!select) {
         return;
     }
     select.innerHTML = '';
-    for (const output of outputs) {
-        select.append(new Option(output.name, output.id));
+    if (outputs.length === 0) {
+        const option = new Option(emptyHint, '');
+        option.disabled = true;
+        select.append(option);
+        select.value = '';
+    } else {
+        for (const output of outputs) {
+            select.append(new Option(output.name, output.id));
+        }
+        select.value = chosenId;
     }
-    select.value = chosenId;
+    select.disabled = outputs.length === 0;
     const wrapper = select.closest('.st-vibe-composer-control');
     if (wrapper) {
         wrapper.hidden = false;
@@ -284,9 +288,9 @@ function updateToolbar() {
     if (button) {
         const state = generating ? 'generating' : playbackActive ? 'playing' : 'idle';
         const presentation = {
-            generating: { icon: 'fa-spinner st-vibe-composer-spinner', title: 'Generating character theme…', label: 'Generating theme…' },
-            playing: { icon: 'fa-stop', title: 'Stop character theme', label: 'Stop character theme' },
-            idle: { icon: 'fa-music', title: 'Generate character theme', label: 'Generate Theme' },
+            generating: { icon: 'fa-spinner extensionsMenuExtensionButton st-vibe-composer-spinner', title: 'Generating theme', label: 'Generating Theme' },
+            playing: { icon: 'fa-stop extensionsMenuExtensionButton', title: 'Stop theme', label: 'Stop Theme' },
+            idle: { icon: 'fa-music extensionsMenuExtensionButton', title: 'Generate theme', label: 'Generate Theme' },
         }[state];
 
         button.hidden = !enabled;
@@ -336,7 +340,12 @@ function updateToolbarButtons() {
 
 function setupToolbarObserver() {
     const observer = new MutationObserver(updateToolbarButtons);
-    observer.observe(document.body, { childList: true, subtree: true });
+    const menu = document.getElementById('extensionsMenu');
+    if (menu) {
+        observer.observe(menu, { childList: true, subtree: true });
+    } else {
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
     updateToolbarButtons();
 }
 
@@ -369,7 +378,7 @@ Requirements:
 - Return exactly three tracks, one of each role: harmony, bass, and melody. Select one instrument for each role from these allowed choices: ${Object.entries(instrumentChoices).map(([role, choices]) => `${role}: ${choices.map(instrument => `${instrument} (${INSTRUMENT_LABELS[instrument]})`).join(', ')}`).join('; ')}. When multiple choices are available, choose the timbre that best fits the character's mood.
 - Each track has an "events" array. Each event has "beat" (start position from 0 to just before ${loopBeats}), "duration" (in beats), "velocity" (integer from 1 to 127), and "notes" (one note name or an array of simultaneous note names). The example is abbreviated; compose enough events to develop the full arrangement.
 - Place events on a sixteenth-note grid, where beat positions advance in steps of 0.25. Use appropriate note durations and overlapping sustained harmony so rests feel intentional rather than leaving accidental gaps. Durations must fit within the loop.
-- Use note names such as C4, F#3, or Bb4. Keep harmony in octaves 2–6, melody in octaves 3–6, and bass in octaves 1–2. Chords may contain up to five notes.
+- Use note names such as C4, F#3, or Bb4. Keep harmony in octaves 2–6 and melody in octaves 3–6. Keep every bass note strictly in octaves 1–2 — bass notes in octave 3 or higher are wrong; use octave 1–2 equivalents such as D2 or E2 instead of D3 or E3. Chords may contain up to five notes.
 - Choose a clear key and a coherent four-chord progression as a recurring harmonic cycle. For longer loops, repeat and develop the cycle with subtle variation. Use colorful 7th, 9th, suspended, or added-tone voicings where they fit; keep bass and melody notes compatible with the harmony.
 - Make the harmony sustained and connected across chord changes, the bass grounded with gentle rhythmic variation, and the melody a memorable phrase that develops without large silent stretches. Vary velocities for accents and softer notes; avoid random notes, constant-volume patterns, and excessive density.
 - For loops longer than four bars, add variation in later repetitions without introducing a new unrelated section. Resolve the final bar naturally into bar one so the loop feels seamless. Return no additional keys or prose.
@@ -597,10 +606,11 @@ async function handleGenerateClick() {
                 playScoreMidi(score, midiOutput);
             } catch (midiError) {
                 console.warn(LOG_TAG, 'MIDI playback unavailable; falling back to sampled playback.', midiError);
+                refreshMidiOutputOptions([], '', 'MIDI access denied or unavailable');
                 await ensureAudioContext();
                 updateStatus('MIDI synth not available. Playing sampled instruments instead…');
                 toastr.info(
-                    'MIDI playback is not available here (unsupported browser, no permission, or no MIDI synth on this system), so the theme is playing with sampled instruments instead.',
+                    'MIDI playback is not available here (no site permission, no MIDI synth detected, or unsupported browser), so the theme is playing with sampled instruments instead.',
                     'MIDI Vibe Composer',
                 );
                 await playScore(score);
