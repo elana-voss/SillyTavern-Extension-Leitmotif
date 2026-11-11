@@ -40,6 +40,11 @@ const INSTRUMENT_LABELS = {
 // sample length must keep looping the steady-state tail instead of falling silent.
 const SUSTAINED_INSTRUMENTS = new Set(['pad_2_warm', 'flute']);
 const NOTE_SEMITONES = { A: 9, B: 11, C: 0, D: 2, E: 4, F: 5, G: 7 };
+// Loop region of a sustained sample: start past the attack, end just before the
+// sample's last frames, and crossfade the seam so looping adds no audible tick.
+const LOOP_START_RATIO = 0.4;
+const LOOP_END_MARGIN_SECONDS = 0.02;
+const LOOP_CROSSFADE_SECONDS = 0.3;
 
 let audioContext;
 let currentScore;
@@ -355,14 +360,80 @@ function noteToMidiNumber(note) {
     return offset + (Number(octave) + 1) * 12;
 }
 
-function getSampleLength(player, note) {
+function getNoteBuffer(player, note) {
     const midi = noteToMidiNumber(note);
-    if (midi === null) {
-        return 0;
-    }
     // soundfont-player keys its decoded buffers by MIDI number, but fall back to
     // the note name in case a future version stops remapping them.
-    return player.buffers?.[midi]?.duration ?? player.buffers?.[note]?.duration ?? 0;
+    return (midi === null ? null : player.buffers?.[midi]) ?? player.buffers?.[note] ?? null;
+}
+
+// Web Audio loops restart the buffer with no crossfade, so looping a sample at an
+// arbitrary point leaves a discontinuity that ticks once per loop pass. Blend the
+// material that would follow the seam into the loop start instead, which makes the
+// loop continuous by construction.
+function buildLoopableBuffer(buffer) {
+    if (!buffer || buffer.leitmotifLoop) {
+        return buffer;
+    }
+
+    const loopStart = buffer.duration * LOOP_START_RATIO;
+    const loopEnd = buffer.duration - LOOP_END_MARGIN_SECONDS;
+    const loopPeriod = loopEnd - loopStart;
+    const crossfade = Math.min(LOOP_CROSSFADE_SECONDS, loopPeriod * 0.3);
+
+    if (!(loopPeriod > 0.1) || !(crossfade > 0.01)) {
+        return buffer;
+    }
+
+    const { sampleRate, numberOfChannels } = buffer;
+    const loopStartFrame = Math.floor(loopStart * sampleRate);
+    const crossfadeFrames = Math.floor(crossfade * sampleRate);
+    const seamFrame = Math.floor((loopEnd - crossfade) * sampleRate);
+
+    if (loopStartFrame + crossfadeFrames >= seamFrame) {
+        return buffer;
+    }
+
+    const loopable = audioContext.createBuffer(numberOfChannels, seamFrame, sampleRate);
+    for (let channel = 0; channel < numberOfChannels; channel++) {
+        const source = buffer.getChannelData(channel);
+        const target = loopable.getChannelData(channel);
+        target.set(source.subarray(0, seamFrame));
+
+        for (let frame = 0; frame < crossfadeFrames; frame++) {
+            const blend = frame / crossfadeFrames;
+            const index = loopStartFrame + frame;
+            // Fade in the material that precedes the seam so the wrap-around is
+            // sample-continuous, then fade the original loop start out.
+            target[index] = source[index] * blend + source[seamFrame + frame] * (1 - blend);
+        }
+    }
+
+    loopable.leitmotifLoop = {
+        start: loopStartFrame / sampleRate,
+        end: seamFrame / sampleRate,
+    };
+    return loopable;
+}
+
+function prepareLoopableSamples(player, notes) {
+    for (const note of notes) {
+        const midi = noteToMidiNumber(note);
+        const keys = [];
+        if (midi !== null && player.buffers?.[midi]) {
+            keys.push(midi);
+        }
+        if (player.buffers?.[note]) {
+            keys.push(note);
+        }
+        for (const key of keys) {
+            const buffer = player.buffers[key];
+            const loopable = buildLoopableBuffer(buffer);
+            if (loopable !== buffer) {
+                player.buffers[key] = loopable;
+            }
+        }
+    }
 }
 
 async function playScore(score) {
@@ -388,6 +459,17 @@ async function playScore(score) {
         }
 
         activePlayers = players;
+        // Rebuild sustained samples with a crossfaded loop so held notes can extend
+        // past the sample length without a click at the loop seam.
+        score.tracks.forEach((track, trackIndex) => {
+            if (SUSTAINED_INSTRUMENTS.has(track.instrument)) {
+                prepareLoopableSamples(
+                    players[trackIndex],
+                    track.events.flatMap(event => event.notes),
+                );
+            }
+        });
+
         const beatLength = 60 / score.tempo;
         const loopLength = score.loopBeats * beatLength;
 
@@ -408,7 +490,8 @@ async function playScore(score) {
                         // for several beats at a slow tempo lasts longer than that. Without
                         // special handling the audio simply runs out mid-note and the gain
                         // envelope never fades, which sounds like a clipped note ending.
-                        const sampleLength = getSampleLength(player, note);
+                        const buffer = getNoteBuffer(player, note);
+                        const sampleLength = buffer?.duration ?? 0;
                         const hasSampleLength = sampleLength > 0.05;
                         // Scale the fade-out with the note: a fixed short release chops
                         // long notes to silence abruptly, while fast short notes still
@@ -418,11 +501,15 @@ async function playScore(score) {
                             : Math.min(0.6, requestedLength * 0.5);
                         const options = { gain, release };
                         if (hasSampleLength && sustainedInstrument) {
-                            // Loop the steady-state tail of the sample (past the attack)
-                            // so held notes keep sounding for their full duration.
+                            // Loop the crossfaded steady-state region of the sample (past
+                            // the attack) so held notes keep sounding for their full length.
+                            const loop = buffer.leitmotifLoop;
                             options.loop = true;
-                            options.loopStart = sampleLength * 0.4;
-                            options.loopEnd = Math.max(options.loopStart + 0.05, sampleLength - 0.02);
+                            options.loopStart = loop?.start ?? sampleLength * LOOP_START_RATIO;
+                            options.loopEnd = loop?.end ?? Math.max(
+                                options.loopStart + 0.05,
+                                sampleLength - LOOP_END_MARGIN_SECONDS,
+                            );
                             options.duration = requestedLength;
                         } else if (hasSampleLength) {
                             // Decaying instruments cannot be looped without repeating
