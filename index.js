@@ -36,6 +36,11 @@ const INSTRUMENT_LABELS = {
     vibraphone: 'Vibraphone',
 };
 
+// Instruments whose FluidR3 samples are sustained loops: holding a note past the
+// sample length must keep looping the steady-state tail instead of falling silent.
+const SUSTAINED_INSTRUMENTS = new Set(['pad_2_warm', 'flute']);
+const NOTE_SEMITONES = { A: 9, B: 11, C: 0, D: 2, E: 4, F: 5, G: 7 };
+
 let audioContext;
 let currentScore;
 let currentCharacterName = 'character';
@@ -340,6 +345,26 @@ function stopPlayback() {
     updateStatus(currentScore ? 'Theme ready. Generate another or download the MIDI.' : 'Ready when a character chat is open.');
 }
 
+function noteToMidiNumber(note) {
+    const match = /^([A-G])([#b]?)(\d)$/.exec(note);
+    if (!match) {
+        return null;
+    }
+    const [, letter, accidental, octave] = match;
+    const offset = NOTE_SEMITONES[letter] + (accidental === '#' ? 1 : accidental === 'b' ? -1 : 0);
+    return offset + (Number(octave) + 1) * 12;
+}
+
+function getSampleLength(player, note) {
+    const midi = noteToMidiNumber(note);
+    if (midi === null) {
+        return 0;
+    }
+    // soundfont-player keys its decoded buffers by MIDI number, but fall back to
+    // the note name in case a future version stops remapping them.
+    return player.buffers?.[midi]?.duration ?? player.buffers?.[note]?.duration ?? 0;
+}
+
 async function playScore(score) {
     stopPlayback();
     const generation = playbackGeneration;
@@ -372,15 +397,44 @@ async function playScore(score) {
             }
 
             score.tracks.forEach((track, trackIndex) => {
+                const player = players[trackIndex];
+                const sustainedInstrument = SUSTAINED_INSTRUMENTS.has(track.instrument);
                 track.events.forEach(event => {
                     const when = startTime + event.beat * beatLength;
                     const gain = 0.48 * event.velocity / 127;
+                    const requestedLength = event.duration * beatLength;
                     event.notes.forEach(note => {
-                        players[trackIndex].play(
-                            note,
-                            when,
-                            { duration: event.duration * beatLength, gain, release: 0.18 },
-                        );
+                        // FluidR3 samples are only 1-2 seconds long, while a chord held
+                        // for several beats at a slow tempo lasts longer than that. Without
+                        // special handling the audio simply runs out mid-note and the gain
+                        // envelope never fades, which sounds like a clipped note ending.
+                        const sampleLength = getSampleLength(player, note);
+                        const hasSampleLength = sampleLength > 0.05;
+                        // Scale the fade-out with the note: a fixed short release chops
+                        // long notes to silence abruptly, while fast short notes still
+                        // need a quick release to stay articulate.
+                        const release = hasSampleLength
+                            ? Math.min(0.6, requestedLength * 0.5, sampleLength * 0.4)
+                            : Math.min(0.6, requestedLength * 0.5);
+                        const options = { gain, release };
+                        if (hasSampleLength && sustainedInstrument) {
+                            // Loop the steady-state tail of the sample (past the attack)
+                            // so held notes keep sounding for their full duration.
+                            options.loop = true;
+                            options.loopStart = sampleLength * 0.4;
+                            options.loopEnd = Math.max(options.loopStart + 0.05, sampleLength - 0.02);
+                            options.duration = requestedLength;
+                        } else if (hasSampleLength) {
+                            // Decaying instruments cannot be looped without repeating
+                            // their attack, so finish the fade before the sample ends.
+                            options.duration = Math.min(
+                                requestedLength,
+                                Math.max(0.05, sampleLength - release),
+                            );
+                        } else {
+                            options.duration = requestedLength;
+                        }
+                        player.play(note, when, options);
                     });
                 });
             });

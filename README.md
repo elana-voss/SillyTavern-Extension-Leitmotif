@@ -16,6 +16,8 @@ Reload SillyTavern, open an individual character chat, and use the music icon be
 
 Use **Generate Theme** in SillyTavern's extensions quick-access menu. It shows a spinner while generating, changes to **Stop Theme** during playback, and returns to its normal label when stopped. The theme plays in the browser with sampled instruments (a master compressor reduces clipping when chords and tracks overlap) and can be saved with **Download the generated theme as MIDI** in the extension settings, which produces the same downloadable MIDI as before. The length presets target 15 seconds, 30 seconds, 1 minute, 1.5 minutes, or 2 minutes; actual duration is rounded to a whole number of 4/4 bars at the selected tempo. In each track's instrument setting, **Let the AI choose** allows a character-suitable timbre from the available samples; a specific instrument can also be selected. Character description, personality, scenario, and first message are sent in separate XML-style sections.
 
+FluidR3 samples are only 1–2 seconds long, while chords held for several beats at a slow tempo last longer than that. Playback therefore scales each note's fade-out with its length and, for sustained instruments (warm synth pad, flute), loops the steady-state portion of the sample so held notes keep sounding; decaying instruments (pianos, vibraphone, basses) instead finish their fade-out before the sample runs out. This keeps slow-tempo themes from ending notes with an abrupt, clipped-sounding cut.
+
 ## Verify
 
 From the extension directory, run the score-validation tests with:
