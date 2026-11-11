@@ -39,7 +39,7 @@ const DEFAULT_SETTINGS = {
     enabled: true,
     lengthSeconds: 30,
     tempo: 74,
-    characterTempo: false,
+    characterTempo: true,
     variety: 'standard',
 };
 
