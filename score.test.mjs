@@ -46,6 +46,7 @@ test('parses timed chords, rests, durations, and dynamics from a fenced JSON sco
     const expected = {
         ...validScore,
         loopBeats: 16,
+        meter: '4/4',
         tracks: validScore.tracks.map(track => ({
             ...track,
             events: track.events.map(event => ({
@@ -113,33 +114,39 @@ test('accepts events through the end of a selected 16-bar loop', () => {
 });
 
 test('accepts the 120-second preset at the highest supported tempo', () => {
-    const bars = getLoopBars(120, 85);
-    assert.equal(bars, 43);
-    const longScore = {
-        ...validScore,
-        tracks: validScore.tracks.map((track, index) => index === 1
-            ? {
-                ...track,
-                events: [{ beat: bars * 4 - 1, duration: 1, velocity: 80, notes: 'A1' }],
-            }
-            : track),
-    };
-    const parsed = parseScore(longScore, { loopBeats: bars * 4, targetTempo: 85 });
-    assert.equal(parsed.loopBeats, 172);
-    assert.equal(getApproximateDuration(bars, 85), 121);
+    for (const tempo of [85, 130]) {
+        const bars = getLoopBars(120, tempo);
+        const expectedBars = Math.round(120 * tempo / 240);
+        assert.equal(bars, expectedBars);
+        const longScore = {
+            ...validScore,
+            tracks: validScore.tracks.map((track, index) => index === 1
+                ? {
+                    ...track,
+                    events: [{ beat: bars * 4 - 1, duration: 1, velocity: 80, notes: 'A1' }],
+                }
+                : track),
+        };
+        const parsed = parseScore(longScore, { loopBeats: bars * 4, targetTempo: tempo });
+        assert.equal(parsed.loopBeats, bars * 4);
+        assert.ok(Math.abs(getApproximateDuration(bars, tempo) - 120) <= 2);
+    }
 });
 
 test('maps duration presets to the nearest whole-bar loop at the selected tempo', () => {
     for (const seconds of [15, 30, 60, 90, 120]) {
-        for (const tempo of [65, 74, 85]) {
-            const bars = getLoopBars(seconds, tempo);
-            assert.ok(bars >= 4);
-            assert.ok(bars <= 44);
-            assert.ok(Math.abs(getApproximateDuration(bars, tempo) - seconds) <= 2);
+        for (const tempo of [50, 74, 130]) {
+            for (const meter of ['3/4', '4/4']) {
+                const bars = getLoopBars(seconds, tempo, meter);
+                assert.ok(bars >= 3);
+                assert.ok(Math.abs(getApproximateDuration(bars, tempo, meter) - seconds) <= 3);
+            }
         }
     }
     assert.throws(() => getLoopBars(45, 74), /available presets/);
-    assert.throws(() => getLoopBars(30, 100), /65 to 85/);
+    assert.throws(() => getLoopBars(30, 140), /50 to 130/);
+    assert.throws(() => getLoopBars(30, 74.5), /50 to 130/);
+    assert.throws(() => getLoopBars(30, 74, '5/4'), /Meter must be/);
 });
 
 test('rejects events that exceed the selected loop length', () => {
@@ -159,13 +166,35 @@ test('supports the defined instruments and role-compatible patches', () => {
     assert.deepEqual(Object.keys(INSTRUMENTS), [
         'acoustic_bass',
         'acoustic_grand_piano',
+        'acoustic_guitar_nylon',
+        'alto_sax',
+        'celesta',
+        'choir_aahs',
+        'clarinet',
+        'contrabass',
         'electric_bass_finger',
+        'electric_guitar_clean',
         'electric_piano_1',
         'flute',
+        'french_horn',
+        'marimba',
+        'music_box',
+        'ocarina',
+        'orchestral_harp',
+        'pad_1_new_age',
         'pad_2_warm',
+        'pad_4_choir',
+        'pizzicato_strings',
+        'recorder',
+        'string_ensemble_1',
+        'synth_bass_1',
+        'synth_strings_1',
+        'tremolo_strings',
         'vibraphone',
+        'violin',
+        'voice_oohs',
     ]);
-    assert.deepEqual(Object.keys(TRACK_ROLES), ['harmony', 'bass', 'melody']);
+    assert.deepEqual(Object.keys(TRACK_ROLES), ['harmony', 'bass', 'melody', 'counter', 'texture']);
     assert.throws(() => parseScore({
         ...validScore,
         tracks: validScore.tracks.map((track, index) =>
@@ -182,12 +211,61 @@ test('supports the defined instruments and role-compatible patches', () => {
 });
 
 test('rejects invalid tempo, missing role, or duplicate role', () => {
-    assert.throws(() => parseScore({ ...validScore, tempo: 86 }), /tempo/);
+    assert.throws(() => parseScore({ ...validScore, tempo: 131 }), /tempo/);
+    assert.throws(() => parseScore({ ...validScore, tempo: 50 - 1 }), /tempo/);
+    assert.ok(parseScore({ ...validScore, tempo: 50 }));
+    assert.ok(parseScore({ ...validScore, tempo: 130 }));
     assert.throws(() => parseScore({ ...validScore, tracks: validScore.tracks.slice(0, 2) }), /harmony, bass, and melody/);
     assert.throws(() => parseScore({
         ...validScore,
         tracks: [validScore.tracks[0], validScore.tracks[1], { ...validScore.tracks[2], role: 'bass', instrument: 'acoustic_bass' }],
     }), /can only appear once/);
+});
+
+test('accepts optional counter and texture tracks in 3/4 meter', () => {
+    const fiveTrackScore34 = {
+        ...validScore,
+        tracks: [
+            { ...validScore.tracks[0], events: validScore.tracks[0].events.slice(0, 3) },
+            ...validScore.tracks.slice(1),
+            {
+                role: 'counter',
+                instrument: 'clarinet',
+                events: [
+                    { beat: 0.5, duration: 0.5, velocity: 60, notes: 'E5' },
+                    { beat: 4.5, duration: 0.5, velocity: 54, notes: 'D5' },
+                ],
+            },
+            {
+                role: 'texture',
+                instrument: 'pad_2_warm',
+                events: [
+                    { beat: 0, duration: 6, velocity: 44, notes: ['A3', 'E4'] },
+                    { beat: 6, duration: 6, velocity: 40, notes: ['C4', 'G3'] },
+                ],
+            },
+        ],
+    };
+    const parsed = parseScore(fiveTrackScore34, { meter: '3/4', loopBeats: 12 });
+    assert.equal(parsed.meter, '3/4');
+    assert.equal(parsed.tracks.length, 5);
+    assert.deepEqual(parsed.tracks.map(track => track.role), ['harmony', 'bass', 'melody', 'counter', 'texture']);
+    assert.deepEqual(parsed.tracks[4].events[0].notes, ['A3', 'E4']);
+});
+
+test('rejects duplicated optional roles and unsupported meters', () => {
+    const extraTexture = {
+        ...validScore,
+        tracks: [
+            ...validScore.tracks,
+            { role: 'texture', instrument: 'pad_1_new_age', events: validScore.tracks[0].events.slice(0, 1) },
+            { role: 'texture', instrument: 'choir_aahs', events: validScore.tracks[0].events.slice(0, 1) },
+        ],
+    };
+    assert.throws(() => parseScore(extraTexture), /can only appear once/);
+    assert.throws(() => parseScore(validScore, { meter: '5/4' }), /Meter must be/);
+    assert.throws(() => parseScore(validScore, { meter: '4/4', loopBeats: 8 }), /whole number of bars/);
+    assert.ok(parseScore(validScore, { meter: '4/4', loopBeats: 16 }));
 });
 
 test('rejects invalid pitches, velocities, and chords with too many notes', () => {

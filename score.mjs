@@ -1,35 +1,80 @@
 export const INSTRUMENTS = Object.freeze({
     acoustic_bass: 32,
     acoustic_grand_piano: 0,
+    acoustic_guitar_nylon: 24,
+    alto_sax: 65,
+    celesta: 8,
+    choir_aahs: 52,
+    clarinet: 71,
+    contrabass: 43,
     electric_bass_finger: 33,
+    electric_guitar_clean: 27,
     electric_piano_1: 4,
     flute: 73,
+    french_horn: 60,
+    marimba: 12,
+    music_box: 10,
+    ocarina: 79,
+    orchestral_harp: 46,
+    pad_1_new_age: 88,
     pad_2_warm: 89,
+    pad_4_choir: 91,
+    pizzicato_strings: 45,
+    recorder: 74,
+    string_ensemble_1: 48,
+    synth_bass_1: 38,
+    synth_strings_1: 50,
+    tremolo_strings: 44,
     vibraphone: 11,
+    violin: 40,
+    voice_oohs: 53,
 });
 
+export const REQUIRED_ROLES = Object.freeze(['harmony', 'bass', 'melody']);
+export const OPTIONAL_ROLES = Object.freeze(['counter', 'texture']);
+
 export const TRACK_ROLES = Object.freeze({
-    harmony: ['electric_piano_1', 'pad_2_warm', 'acoustic_grand_piano', 'vibraphone'],
-    bass: ['acoustic_bass', 'electric_bass_finger'],
-    melody: ['acoustic_grand_piano', 'electric_piano_1', 'vibraphone', 'flute'],
+    harmony: ['electric_piano_1', 'pad_2_warm', 'pad_1_new_age', 'pad_4_choir', 'acoustic_grand_piano', 'vibraphone', 'string_ensemble_1', 'tremolo_strings', 'synth_strings_1', 'choir_aahs'],
+    bass: ['acoustic_bass', 'electric_bass_finger', 'synth_bass_1', 'contrabass'],
+    melody: ['acoustic_grand_piano', 'electric_piano_1', 'vibraphone', 'marimba', 'celesta', 'music_box', 'acoustic_guitar_nylon', 'electric_guitar_clean', 'flute', 'recorder', 'ocarina', 'clarinet', 'violin', 'french_horn'],
+    counter: ['flute', 'clarinet', 'violin', 'french_horn', 'alto_sax', 'voice_oohs', 'electric_guitar_clean', 'vibraphone', 'music_box'],
+    texture: ['pad_1_new_age', 'pad_2_warm', 'pad_4_choir', 'string_ensemble_1', 'choir_aahs', 'tremolo_strings', 'synth_strings_1', 'voice_oohs', 'orchestral_harp', 'pizzicato_strings'],
+});
+
+export const METERS = Object.freeze({
+    '3/4': 3,
+    '4/4': 4,
 });
 
 const NOTE_PATTERN = /^[A-G](?:#|b)?[1-6]$/;
 const BEAT_GRID = 0.25;
 const MAX_NOTES_PER_EVENT = 5;
+const MIN_BARS = 3;
+// Two minutes at 130 BPM is 260 quarter beats; allow whole bars up to a touch more.
+const MAX_LOOP_BEATS = 264;
+const MIN_TEMPO = 50;
+const MAX_TEMPO = 130;
 
-export function getLoopBars(lengthSeconds, tempo) {
+function getBeatsPerBar(meter) {
+    const beatsPerBar = METERS[meter];
+    if (!beatsPerBar) {
+        throw new Error('Meter must be 3/4 or 4/4.');
+    }
+    return beatsPerBar;
+}
+
+export function getLoopBars(lengthSeconds, tempo, meter = '4/4') {
     if (![15, 30, 60, 90, 120].includes(lengthSeconds)) {
         throw new Error('Loop duration must be one of the available presets.');
     }
-    if (!Number.isInteger(tempo) || tempo < 65 || tempo > 85) {
-        throw new Error('Tempo must be a whole number from 65 to 85 BPM.');
+    if (!Number.isInteger(tempo) || tempo < MIN_TEMPO || tempo > MAX_TEMPO) {
+        throw new Error(`Tempo must be a whole number from ${MIN_TEMPO} to ${MAX_TEMPO} BPM.`);
     }
-    return Math.max(4, Math.round(lengthSeconds * tempo / 240));
+    return Math.max(MIN_BARS, Math.round(lengthSeconds * tempo / 60 / getBeatsPerBar(meter)));
 }
 
-export function getApproximateDuration(bars, tempo) {
-    return Math.round(bars * 4 * 60 / tempo);
+export function getApproximateDuration(bars, tempo, meter = '4/4') {
+    return Math.round(bars * getBeatsPerBar(meter) * 60 / tempo);
 }
 
 function isOnBeatGrid(value) {
@@ -45,7 +90,7 @@ function normalizeNoteOctave(note, role) {
     const octave = Number(octaveText);
     const [minimum, maximum] = role === 'bass'
         ? [1, 2]
-        : role === 'harmony'
+        : role === 'harmony' || role === 'texture'
             ? [2, 6]
             : [3, 6];
     const normalizedOctave = Math.max(minimum, Math.min(maximum, octave));
@@ -54,11 +99,17 @@ function normalizeNoteOctave(note, role) {
 
 export function parseScore(response, {
     loopBeats = 16,
+    meter = '4/4',
     targetTempo,
     instrumentOptions = TRACK_ROLES,
 } = {}) {
-    if (!Number.isInteger(loopBeats) || loopBeats < 16 || loopBeats > 176 || loopBeats % 4 !== 0) {
-        throw new Error('Loop length must be a whole number of bars from 4 to 44.');
+    const beatsPerBar = getBeatsPerBar(meter);
+
+    if (!Number.isInteger(loopBeats)
+        || loopBeats < MIN_BARS * beatsPerBar
+        || loopBeats > MAX_LOOP_BEATS
+        || loopBeats % beatsPerBar !== 0) {
+        throw new Error('Loop length must be a whole number of bars from 3 bars up to the two-minute preset.');
     }
 
     let value = response;
@@ -86,17 +137,19 @@ export function parseScore(response, {
         throw new Error('The score must be a JSON object.');
     }
 
-    if (!Number.isFinite(value.tempo) || value.tempo < 65 || value.tempo > 85) {
-        throw new Error('Score tempo must be a number from 65 to 85 BPM.');
+    if (!Number.isFinite(value.tempo) || value.tempo < MIN_TEMPO || value.tempo > MAX_TEMPO) {
+        throw new Error(`Score tempo must be a number from ${MIN_TEMPO} to ${MAX_TEMPO} BPM.`);
     }
 
     if (targetTempo !== undefined
-        && (!Number.isInteger(targetTempo) || targetTempo < 65 || targetTempo > 85)) {
-        throw new Error('Target tempo must be a whole number from 65 to 85 BPM.');
+        && (!Number.isInteger(targetTempo) || targetTempo < MIN_TEMPO || targetTempo > MAX_TEMPO)) {
+        throw new Error(`Target tempo must be a whole number from ${MIN_TEMPO} to ${MAX_TEMPO} BPM.`);
     }
 
-    if (!Array.isArray(value.tracks) || value.tracks.length !== 3) {
-        throw new Error('The score must contain harmony, bass, and melody tracks.');
+    if (!Array.isArray(value.tracks)
+        || value.tracks.length < REQUIRED_ROLES.length
+        || value.tracks.length > REQUIRED_ROLES.length + OPTIONAL_ROLES.length) {
+        throw new Error('The score must contain harmony, bass, and melody tracks, optionally with counter and texture tracks.');
     }
 
     const seenRoles = new Set();
@@ -202,13 +255,14 @@ export function parseScore(response, {
         };
     });
 
-    if (seenRoles.size !== Object.keys(TRACK_ROLES).length) {
-        throw new Error('The score must contain one harmony, one bass, and one melody track.');
+    if (REQUIRED_ROLES.some(role => !seenRoles.has(role))) {
+        throw new Error('The score must contain harmony, bass, and melody tracks.');
     }
 
     return {
         tempo: targetTempo ?? value.tempo,
         loopBeats,
+        meter,
         tracks,
     };
 }

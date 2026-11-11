@@ -29,16 +29,56 @@ const DEFAULT_SETTINGS = {
 const INSTRUMENT_LABELS = {
     acoustic_bass: 'Acoustic bass',
     acoustic_grand_piano: 'Grand piano',
+    acoustic_guitar_nylon: 'Nylon guitar',
+    alto_sax: 'Alto sax',
+    celesta: 'Celesta',
+    choir_aahs: 'Choir',
+    clarinet: 'Clarinet',
+    contrabass: 'Contrabass',
     electric_bass_finger: 'Fingered electric bass',
+    electric_guitar_clean: 'Clean electric guitar',
     electric_piano_1: 'Electric piano',
     flute: 'Flute',
+    french_horn: 'French horn',
+    marimba: 'Marimba',
+    music_box: 'Music box',
+    ocarina: 'Ocarina',
+    orchestral_harp: 'Harp',
+    pad_1_new_age: 'New-age synth pad',
     pad_2_warm: 'Warm synth pad',
+    pad_4_choir: 'Choir synth pad',
+    pizzicato_strings: 'Pizzicato strings',
+    recorder: 'Recorder',
+    string_ensemble_1: 'String ensemble',
+    synth_bass_1: 'Synth bass',
+    synth_strings_1: 'Synth strings',
+    tremolo_strings: 'Tremolo strings',
     vibraphone: 'Vibraphone',
+    violin: 'Violin',
+    voice_oohs: 'Voice oohs',
 };
 
-// Instruments whose FluidR3 samples are sustained loops: holding a note past the
-// sample length must keep looping the steady-state tail instead of falling silent.
-const SUSTAINED_INSTRUMENTS = new Set(['pad_2_warm', 'flute']);
+// Instruments whose FluidR3 samples are sustained long tones: holding a note past
+// the sample length must keep looping the steady-state tail instead of falling
+// silent. Decaying instruments (pianos, guitars, harp, marimba, basses, pizzicato)
+// are excluded so their fade finishes inside the sample.
+const SUSTAINED_INSTRUMENTS = new Set([
+    'pad_2_warm',
+    'pad_1_new_age',
+    'pad_4_choir',
+    'string_ensemble_1',
+    'tremolo_strings',
+    'synth_strings_1',
+    'choir_aahs',
+    'voice_oohs',
+    'flute',
+    'recorder',
+    'ocarina',
+    'clarinet',
+    'french_horn',
+    'alto_sax',
+    'violin',
+]);
 const NOTE_SEMITONES = { A: 9, B: 11, C: 0, D: 2, E: 4, F: 5, G: 7 };
 // Loop region of a sustained sample: start past the attack, end just before the
 // sample's last frames. Loop points are only used when the waveform there lines up
@@ -79,8 +119,8 @@ function loadSettings() {
         extension_settings[MODULE].lengthSeconds = DEFAULT_SETTINGS.lengthSeconds;
     }
     if (!Number.isInteger(extension_settings[MODULE].tempo)
-        || extension_settings[MODULE].tempo < 65
-        || extension_settings[MODULE].tempo > 85) {
+        || extension_settings[MODULE].tempo < 50
+        || extension_settings[MODULE].tempo > 130) {
         extension_settings[MODULE].tempo = DEFAULT_SETTINGS.tempo;
     }
     extension_settings[MODULE].instruments = Object.fromEntries(
