@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS = {
     lengthSeconds: 30,
     tempo: 74,
     playbackMode: 'soundfont',
+    midiOutput: 'auto',
     instruments: { harmony: 'auto', bass: 'auto', melody: 'auto' },
 };
 
@@ -47,6 +48,10 @@ let activePlayers = [];
 let midiWriterPromise;
 let soundfontPromise;
 let masterCompressor;
+let midiAccess;
+let midiAccessPromise;
+let midiOutput;
+let scheduledMidiNotes = [];
 
 function loadSettings() {
     extension_settings[MODULE] = Object.assign(
@@ -127,6 +132,87 @@ function loadSoundfont() {
             });
     }
     return soundfontPromise;
+}
+
+function loadMidiAccess() {
+    if (!navigator.requestMIDIAccess) {
+        return Promise.reject(new Error('This browser does not support the Web MIDI API.'));
+    }
+    if (!midiAccessPromise) {
+        midiAccessPromise = navigator.requestMIDIAccess({ sysex: false })
+            .then(access => {
+                midiAccess = access;
+                access.onstatechange = () => {
+                    if (extension_settings[MODULE]?.playbackMode === 'midi' && !playbackActive) {
+                        pickMidiOutput(access, true);
+                    }
+                };
+                return access;
+            })
+            .catch(error => {
+                midiAccessPromise = undefined;
+                throw error;
+            });
+    }
+    return midiAccessPromise;
+}
+
+function listMidiOutputs(access) {
+    return [...access.outputs.values()].map(port => ({ id: port.id, name: port.name || 'MIDI output' }));
+}
+
+function pickMidiOutput(access, updateOptions = false) {
+    const outputs = listMidiOutputs(access);
+    if (outputs.length === 0) {
+        midiOutput = undefined;
+        return null;
+    }
+    const savedId = extension_settings[MODULE].midiOutput;
+    const chosen = outputs.find(output => output.id === savedId) ?? outputs[0];
+    midiOutput = access.outputs.get(chosen.id);
+    if (updateOptions) {
+        refreshMidiOutputOptions(outputs, chosen.id);
+    }
+    return chosen;
+}
+
+function refreshMidiOutputOptions(outputs, chosenId) {
+    const select = document.getElementById('st_vibe_composer_midi_output');
+    if (!select) {
+        return;
+    }
+    select.innerHTML = '';
+    for (const output of outputs) {
+        select.append(new Option(output.name, output.id));
+    }
+    select.value = chosenId;
+    const wrapper = select.closest('.st-vibe-composer-control');
+    if (wrapper) {
+        wrapper.hidden = false;
+    }
+}
+
+const NOTE_SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+
+function noteNameToMidi(note) {
+    const match = /^([A-G])(#|b)?([1-6])$/.exec(note);
+    if (!match) {
+        return null;
+    }
+    const semitone = NOTE_SEMITONES[match[1]]
+        + (match[2] === '#' ? 1 : match[2] === 'b' ? -1 : 0);
+    return 12 * (Number(match[3]) + 1) + semitone;
+}
+
+function stopMidiNotes() {
+    if (!midiOutput) {
+        return;
+    }
+    midiOutput.clear();
+    for (const message of scheduledMidiNotes) {
+        midiOutput.send(message);
+    }
+    scheduledMidiNotes = [];
 }
 
 function getActiveCharacter() {
@@ -322,6 +408,7 @@ function stopPlayback() {
         clearTimeout(playbackTimer);
         playbackTimer = undefined;
     }
+    stopMidiNotes();
     for (const player of activePlayers) {
         player.stop();
     }
@@ -392,6 +479,59 @@ async function playScore(score) {
     }
 }
 
+function playScoreMidi(score, output) {
+    stopPlayback();
+    const generation = playbackGeneration;
+    playbackActive = true;
+    updateToolbar();
+
+    const channels = [0, 1, 2];
+    score.tracks.forEach((track, trackIndex) => {
+        const program = INSTRUMENTS[track.instrument];
+        if (Number.isInteger(program)) {
+            output.send([0xC0 | channels[trackIndex % 3], program]);
+        }
+    });
+
+    const beatLength = 60 / score.tempo;
+    const loopLength = score.loopBeats * beatLength;
+
+    const scheduleLoop = (startTimeMs = performance.now() + 80) => {
+        if (generation !== playbackGeneration) {
+            return;
+        }
+
+        score.tracks.forEach((track, trackIndex) => {
+            const channel = channels[trackIndex % 3];
+            const noteOnStatus = 0x90 | channel;
+            const noteOffStatus = 0x80 | channel;
+            track.events.forEach(event => {
+                const whenMs = startTimeMs + event.beat * beatLength * 1000;
+                const durationMs = event.duration * beatLength * 1000;
+                const velocity = Math.min(127, Math.max(1, event.velocity));
+                event.notes.forEach(note => {
+                    const midiNote = noteNameToMidi(note);
+                    if (midiNote === null) {
+                        return;
+                    }
+                    output.send([noteOnStatus, midiNote, velocity], Math.round(whenMs));
+                    output.send([noteOffStatus, midiNote, 0], Math.round(whenMs + durationMs));
+                    scheduledMidiNotes.push([noteOffStatus, midiNote, 0]);
+                });
+            });
+        });
+        const nextStart = startTimeMs + loopLength * 1000;
+        playbackTimer = setTimeout(
+            () => scheduleLoop(Math.max(nextStart, performance.now() + 80)),
+            Math.max(0, nextStart - performance.now() - 100),
+        );
+    };
+
+    updateStatus(`Playing ${currentCharacterName}'s looping theme through the system MIDI synthesizer.`);
+    scheduleLoop();
+    updateToolbar();
+}
+
 async function handleGenerateClick() {
     if (generating) {
         return;
@@ -447,12 +587,24 @@ async function handleGenerateClick() {
             updateStatus('Theme generated. Loading sampled instruments…');
             await playScore(score);
         } else {
-            const duration = getApproximateDuration(bars, tempo);
-            updateStatus(`Generated a ${duration}-second MIDI file. Download it and open it in a MIDI player or synthesizer.`);
-            toastr.info(
-                'MIDI file generated. Open the extension settings and select “Download the generated theme as MIDI”. MIDI file mode does not play audio in the browser; choose Sampled to hear it here.',
-                'MIDI Vibe Composer',
-            );
+            try {
+                const access = await loadMidiAccess();
+                const chosen = pickMidiOutput(access, true);
+                if (!chosen) {
+                    throw new Error('No MIDI output is available on this system.');
+                }
+                updateStatus(`Theme generated. Playing through ${chosen.name}…`);
+                playScoreMidi(score, midiOutput);
+            } catch (midiError) {
+                console.warn(LOG_TAG, 'MIDI playback unavailable; falling back to sampled playback.', midiError);
+                await ensureAudioContext();
+                updateStatus('MIDI synth not available. Playing sampled instruments instead…');
+                toastr.info(
+                    'MIDI playback is not available here (unsupported browser, no permission, or no MIDI synth on this system), so the theme is playing with sampled instruments instead.',
+                    'MIDI Vibe Composer',
+                );
+                await playScore(score);
+            }
         }
     } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
@@ -547,8 +699,16 @@ function bindSettings() {
             stopPlayback();
         }
         updateStatus(extension_settings[MODULE].playbackMode === 'midi'
-            ? 'MIDI file mode selected. Open downloaded files in a MIDI player or synthesizer.'
-            : 'Browser audio mode selected.');
+            ? 'MIDI mode selected. Themes play through the system MIDI synthesizer.'
+            : 'Sampled audio mode selected.');
+    });
+
+    $('#st_vibe_composer_midi_output').on('change', function () {
+        extension_settings[MODULE].midiOutput = $(this).val();
+        saveSettingsDebounced();
+        if (midiAccess) {
+            pickMidiOutput(midiAccess);
+        }
     });
 
     $('.st-vibe-composer-instrument').each(function () {

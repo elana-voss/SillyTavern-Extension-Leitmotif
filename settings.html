@@ -35,9 +35,13 @@
                 <b>Playback</b>
                 <div class="st-vibe-composer-mode-options" role="group" aria-label="Playback mode">
                     <button class="menu_button st-vibe-composer-mode" type="button" data-mode="soundfont" aria-pressed="true">Sampled</button>
-                    <button class="menu_button st-vibe-composer-mode" type="button" data-mode="midi" aria-pressed="false">MIDI file only</button>
+                    <button class="menu_button st-vibe-composer-mode" type="button" data-mode="midi" aria-pressed="false">MIDI (system synth)</button>
                 </div>
-                <small>Both modes create a downloadable MIDI file. Browser playback uses samples; MIDI file only must be opened in a MIDI player or synthesizer.</small>
+                <small>Sampled plays with instrument samples in the browser. MIDI plays live through the operating system's synthesizer (Windows has one built in; macOS and Linux need a MIDI synth or device) and also saves a downloadable MIDI file. If no MIDI output is available, themes fall back to sampled playback.</small>
+            </div>
+            <div class="st-vibe-composer-control" hidden>
+                <label for="st_vibe_composer_midi_output"><b>MIDI output</b></label>
+                <select id="st_vibe_composer_midi_output" class="text_pole"></select>
             </div>
             <div class="st-vibe-composer-control st-vibe-composer-instruments">
                 <b>Instrument choices</b>
