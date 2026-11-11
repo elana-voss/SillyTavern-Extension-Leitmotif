@@ -46,7 +46,7 @@ export const METERS = Object.freeze({
     '4/4': 4,
 });
 
-const NOTE_PATTERN = /^[A-G](?:#|b)?[1-6]$/;
+export const NOTE_PATTERN = /^[A-G](?:#|b)?[1-6]$/;
 const BEAT_GRID = 0.25;
 const MAX_NOTES_PER_EVENT = 5;
 const MIN_BARS = 3;
