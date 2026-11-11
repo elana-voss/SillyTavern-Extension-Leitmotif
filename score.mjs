@@ -47,6 +47,98 @@ export const METERS = Object.freeze({
 });
 
 export const NOTE_PATTERN = /^[A-G](?:#|b)?[1-6]$/;
+
+// Structured output for the composition call. This is a strict-mode-compliant
+// shape envelope (every key required, optionals nullable, closed objects);
+// semantic bounds like tempo range or role-instrument pairing stay enforced in
+// parseScore because OpenAI strict schemas cannot express numeric bounds.
+export const SCORE_JSON_SCHEMA = Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: ['tempo', 'meter', 'tracks'],
+    properties: {
+        tempo: {
+            type: 'number',
+            description: 'Whole-number tempo from 50 to 130 BPM.',
+        },
+        meter: {
+            type: 'string',
+            enum: ['3/4', '4/4'],
+        },
+        tracks: {
+            type: 'array',
+            items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['role', 'instrument', 'events'],
+                properties: {
+                    role: {
+                        type: 'string',
+                        enum: ['harmony', 'bass', 'melody', 'counter', 'texture'],
+                    },
+                    instrument: {
+                        type: 'string',
+                        enum: Object.keys(INSTRUMENTS),
+                    },
+                    events: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            additionalProperties: false,
+                            required: ['beat', 'duration', 'velocity', 'notes'],
+                            properties: {
+                                beat: {
+                                    type: 'number',
+                                    description: 'Start position in beats on the sixteenth-note grid, 0 to just before the loop length.',
+                                },
+                                duration: {
+                                    type: 'number',
+                                    description: 'Length in beats, on the sixteenth-note grid; beat plus duration fits inside the loop.',
+                                },
+                                velocity: {
+                                    type: 'number',
+                                    description: 'Integer from 1 to 127.',
+                                },
+                                notes: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    description: 'One to five simultaneous note names like C4, F#3, or Bb4.',
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+});
+
+// LLM transports differ: some backends yield a bare JSON string, others the raw
+// completion object (e.g. {choices:[{message:{content}}]}). Unwrap every shape
+// seen in the wild so the parsers never depend on one transport; returns null
+// when the input is not text-like, i.e. an already-parsed object.
+export function normalizeResponseText(response) {
+    if (typeof response === 'string') {
+        return response;
+    }
+    if (!response || typeof response !== 'object' || Array.isArray(response)) {
+        return null;
+    }
+    let content;
+    if (Array.isArray(response.choices)) {
+        const first = response.choices[0] ?? {};
+        content = first.message?.content ?? first.text ?? null;
+    } else if (response.message && typeof response.message === 'object') {
+        content = response.message.content ?? null;
+    }
+    if (typeof content === 'string') {
+        return content;
+    }
+    if (Array.isArray(content)) {
+        return content.map(part => (typeof part?.text === 'string' ? part.text : '')).join('');
+    }
+    return null;
+}
 const BEAT_GRID = 0.25;
 const MAX_NOTES_PER_EVENT = 5;
 const MIN_BARS = 3;
@@ -112,10 +204,11 @@ export function parseScore(response, {
         throw new Error('Loop length must be a whole number of bars from 3 bars up to the two-minute preset.');
     }
 
+    const text = normalizeResponseText(response);
     let value = response;
 
-    if (typeof response === 'string') {
-        const cleaned = response
+    if (text !== null) {
+        const cleaned = text
             .trim()
             .replace(/^```(?:json)?\s*/i, '')
             .replace(/\s*```$/, '');
@@ -135,6 +228,11 @@ export function parseScore(response, {
 
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new Error('The score must be a JSON object.');
+    }
+    // An API payload that never unwrapped to text is a failed extraction,
+    // not a score: fail with the malformed-JSON error so the caller can retry.
+    if (text === null && (Array.isArray(value.choices) || (value.message && typeof value.message === 'object'))) {
+        throw new Error('The model response did not contain a JSON score.');
     }
 
     if (!Number.isFinite(value.tempo) || value.tempo < MIN_TEMPO || value.tempo > MAX_TEMPO) {

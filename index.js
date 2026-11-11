@@ -10,9 +10,11 @@ import {
     INSTRUMENTS,
     METERS,
     parseScore,
+    SCORE_JSON_SCHEMA,
     TRACK_ROLES,
 } from './score.mjs';
 import {
+    BRIEF_JSON_SCHEMA,
     getBriefPrompt,
     musicBriefToPromptSection,
     parseBrief,
@@ -151,15 +153,23 @@ function updateLengthEstimate() {
     const seconds = extension_settings[MODULE].lengthSeconds;
     if (extension_settings[MODULE].characterTempo) {
         $('#st_leitmotif_length_estimate').text(
-            `About ${seconds} seconds per loop; tempo and meter come from the character`,
+            `New themes will be about ${seconds} seconds long; tempo and meter come from the character`,
         );
         return;
     }
     const bars = getLoopBars(seconds, tempo);
     const actualSeconds = getApproximateDuration(bars, tempo);
     $('#st_leitmotif_length_estimate').text(
-        `About ${actualSeconds} seconds (${bars} bars) at the selected tempo`,
+        `New themes will be about ${actualSeconds} seconds long (${bars} bars) at the selected tempo`,
     );
+}
+
+// Confirmation shown inside the tempo block so the feedback sits next to the
+// control that caused it instead of the status line further down.
+function updateTempoFeedback() {
+    $('#st_leitmotif_tempo_feedback').text(extension_settings[MODULE].characterTempo
+        ? 'New themes will take their tempo from the character.'
+        : `New themes will use ${extension_settings[MODULE].tempo} BPM.`);
 }
 
 function updateBriefPreview(brief) {
@@ -398,7 +408,14 @@ async function analyzeCharacter(character) {
                 ? prompt
                 : `${prompt}\n\nYour previous attempt was not valid JSON. Return a complete, compact music brief object only. Do not use markdown or omit closing brackets.`,
             systemPrompt: 'You are a music analyst. Return valid JSON only, following the requested brief schema exactly.',
-            responseLength: 900,
+            responseLength: 1200,
+            jsonSchema: {
+                name: 'music_brief',
+                description: 'Music brief capturing the character\'s musical identity.',
+                value: BRIEF_JSON_SCHEMA,
+                strict: true,
+                returnInvalid: true,
+            },
         });
         const brief = parseBrief(response);
         if (brief) {
@@ -734,6 +751,13 @@ async function handleGenerateClick() {
                     : `${prompt}\n\nYour previous attempt was not valid JSON. Return a complete, compact score object only. Do not use markdown or omit closing brackets.`,
                 systemPrompt: 'You are a music composer. Return valid JSON only, following the requested score schema exactly.',
                 responseLength: Math.ceil((attempt === 0 ? 1200 : 2000) * bars / 4),
+                jsonSchema: {
+                    name: 'leitmotif_score',
+                    description: 'Looping character theme score with timed events.',
+                    value: SCORE_JSON_SCHEMA,
+                    strict: true,
+                    returnInvalid: true,
+                },
             });
             try {
                 score = parseScore(response, parseOptions);
@@ -831,7 +855,7 @@ function bindSettings() {
             $('#st_leitmotif_tempo_value').text(`${tempo} BPM`);
             saveSettingsDebounced();
             updateLengthEstimate();
-            updateStatus(`New themes will use ${tempo} BPM.`);
+            updateTempoFeedback();
         });
     $('#st_leitmotif_tempo_value').text(`${extension_settings[MODULE].tempo} BPM`);
     $('#st_leitmotif_tempo').prop('disabled', extension_settings[MODULE].characterTempo);
@@ -843,9 +867,7 @@ function bindSettings() {
             saveSettingsDebounced();
             $('#st_leitmotif_tempo').prop('disabled', extension_settings[MODULE].characterTempo);
             updateLengthEstimate();
-            updateStatus(extension_settings[MODULE].characterTempo
-                ? 'New themes will take their tempo from the character.'
-                : `New themes will use ${extension_settings[MODULE].tempo} BPM.`);
+            updateTempoFeedback();
         });
 
     $('#st_leitmotif_variety')
@@ -879,9 +901,9 @@ function bindSettings() {
         $(this).attr('aria-pressed', 'true');
         saveSettingsDebounced();
         updateLengthEstimate();
-        updateStatus(`New themes will be about ${extension_settings[MODULE].lengthSeconds} seconds long.`);
     });
     updateLengthEstimate();
+    updateTempoFeedback();
 }
 
 jQuery(async () => {

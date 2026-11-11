@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+    BRIEF_JSON_SCHEMA,
     BRIEF_MODES,
     getBriefPrompt,
     musicBriefToPromptSection,
@@ -126,4 +127,48 @@ test('the analysis prompt carries the profile and the layer mapping', () => {
     }
     const noHint = getBriefPrompt({ name: 'Solo', profileFields: 'x' }, {});
     assert.match(noHint, /Choose the tempo purely from the character/);
+});
+
+// Every object level of a strict-mode schema must be closed and fully required.
+function assertSchemaObjectsClosed(schema) {
+    if (!schema || typeof schema !== 'object') {
+        return;
+    }
+    if (schema.type === 'object'
+        || (Array.isArray(schema.type) && schema.type.includes('object'))
+        || schema.properties) {
+        assert.equal(schema.additionalProperties, false);
+        assert.ok(Array.isArray(schema.required));
+        for (const key of Object.keys(schema.properties ?? {})) {
+            assert.ok(schema.required.includes(key), `missing required key: ${key}`);
+        }
+    }
+    for (const value of Object.values(schema.properties ?? {})) {
+        assertSchemaObjectsClosed(value);
+    }
+    if (schema.items) {
+        assertSchemaObjectsClosed(schema.items);
+    }
+}
+
+test('BRIEF_JSON_SCHEMA is strict-mode compliant at every object level', () => {
+    assertSchemaObjectsClosed(BRIEF_JSON_SCHEMA);
+});
+
+test('parseBrief unwraps a raw completion object', () => {
+    const wrapped = parseBrief({ choices: [{ message: { content: JSON.stringify(fullBrief) } }] });
+    assert.equal(wrapped.backdrop, fullBrief.backdrop);
+    assert.equal(wrapped.meter, '3/4');
+});
+
+test('parseBrief fails soft on un-unwrappable payloads and garbage', () => {
+    assert.equal(parseBrief({ choices: [{ message: { content: 5 } }] }), null);
+    assert.equal(parseBrief('not json at all'), null);
+    assert.equal(parseBrief(null), null);
+});
+
+test('parseBrief accepts an already-parsed brief object', () => {
+    const parsed = parseBrief(fullBrief);
+    assert.equal(parsed.tempo, 96);
+    assert.deepEqual(parsed.motif.notes, ['A3', 'C4', 'D3']);
 });

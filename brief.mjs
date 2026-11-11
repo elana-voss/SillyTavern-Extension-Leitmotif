@@ -1,4 +1,4 @@
-import { NOTE_PATTERN } from './score.mjs';
+import { NOTE_PATTERN, normalizeResponseText } from './score.mjs';
 
 export const BRIEF_MODES = Object.freeze([
     'ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'harmonic_minor', 'melodic_minor',
@@ -8,6 +8,80 @@ export const BRIEF_FEELS = Object.freeze(['straight', 'swing']);
 export const BRIEF_METERS = Object.freeze(['3/4', '4/4']);
 export const BRIEF_ENERGY_LEVELS = Object.freeze(['low', 'medium', 'high', 'rise', 'fall', 'break', 'full']);
 export const VARIETY_LEVELS = Object.freeze(['focused', 'standard', 'wild']);
+
+// Structured output for the analysis call. Strict-mode-compliant shape
+// envelope (every key required, optionals nullable, closed objects); numeric
+// bounds and enum sanity stay enforced in parseBrief because OpenAI strict
+// schemas cannot express bounds.
+export const BRIEF_JSON_SCHEMA = Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: [
+        'backdrop', 'action', 'twist', 'traits', 'arc', 'genre_references', 'era', 'key',
+        'mode', 'feel', 'meter', 'tempo', 'energy_curve', 'density', 'motif', 'timbre',
+        'harmony_flavor', 'surprise',
+    ],
+    properties: {
+        backdrop: { type: ['string', 'null'], description: 'One sentence.' },
+        action: { type: ['string', 'null'], description: 'One sentence.' },
+        twist: { type: ['string', 'null'], description: 'A short phrase.' },
+        traits: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '2-6 short traits.',
+        },
+        arc: { type: ['string', 'null'], description: "One sentence like 'quiet, builds, releases'." },
+        genre_references: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '2-4 concrete genre or world references.',
+        },
+        era: { type: ['string', 'null'], description: 'E.g. baroque, noir, modern, pastoral.' },
+        key: { type: ['string', 'null'], description: 'E.g. D or D minor.' },
+        mode: { type: ['string', 'null'], enum: [...BRIEF_MODES, null] },
+        feel: { type: ['string', 'null'], enum: [...BRIEF_FEELS, null] },
+        meter: { type: ['string', 'null'], enum: [...BRIEF_METERS, null] },
+        tempo: { type: ['number', 'null'], description: 'Whole number from 50 to 130 BPM.' },
+        energy_curve: {
+            type: 'array',
+            items: { type: ['string', 'null'], enum: [...BRIEF_ENERGY_LEVELS, null] },
+            description: '2-8 entries covering the loop from start to end.',
+        },
+        density: { type: ['string', 'null'], enum: [...BRIEF_DENSITIES, null] },
+        motif: {
+            type: ['object', 'null'],
+            additionalProperties: false,
+            required: ['notes', 'rhythm', 'character'],
+            properties: {
+                notes: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: '2-7 raw note names like A3, C4, D3.',
+                },
+                rhythm: {
+                    type: 'array',
+                    items: { type: 'number' },
+                    description: 'Matching rhythm beats, one per note.',
+                },
+                character: { type: ['string', 'null'], description: 'One sentence.' },
+            },
+        },
+        timbre: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['harmony', 'bass', 'melody', 'counter', 'texture'],
+            properties: {
+                harmony: { type: ['string', 'null'] },
+                bass: { type: ['string', 'null'] },
+                melody: { type: ['string', 'null'] },
+                counter: { type: ['string', 'null'] },
+                texture: { type: ['string', 'null'] },
+            },
+        },
+        harmony_flavor: { type: ['string', 'null'], description: 'One sentence.' },
+        surprise: { type: ['string', 'null'], description: 'One sentence naming the exact moment and what shifts.' },
+    },
+});
 
 const MAX_FIELDS = {
     text: 240,
@@ -77,26 +151,32 @@ ${escapeXml(character.profileFields)}
 // Fail-soft by design: a partial or eccentric brief still produces music, so
 // content problems degrade into sensible defaults instead of failing the run.
 export function parseBrief(response) {
-    if (!response || typeof response !== 'string') {
-        return null;
-    }
-    const cleaned = response
-        .trim()
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```$/, '');
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start < 0 || end < start) {
-        return null;
-    }
+    const text = normalizeResponseText(response);
+    let value = response;
 
-    let value;
-    try {
-        value = JSON.parse(cleaned.slice(start, end + 1));
-    } catch {
-        return null;
+    if (text !== null) {
+        const cleaned = text
+            .trim()
+            .replace(/^```(?:json)?\s*/i, '')
+            .replace(/\s*```$/, '');
+        const start = cleaned.indexOf('{');
+        const end = cleaned.lastIndexOf('}');
+        if (start < 0 || end < start) {
+            return null;
+        }
+
+        try {
+            value = JSON.parse(cleaned.slice(start, end + 1));
+        } catch {
+            return null;
+        }
     }
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+    // An API payload that never unwrapped to text is a failed extraction,
+    // not a brief: fail soft to null so the caller can retry.
+    if (text === null && (Array.isArray(value.choices) || (value.message && typeof value.message === 'object'))) {
         return null;
     }
 

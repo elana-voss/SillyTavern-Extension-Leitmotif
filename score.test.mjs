@@ -4,7 +4,9 @@ import {
     getApproximateDuration,
     getLoopBars,
     INSTRUMENTS,
+    normalizeResponseText,
     parseScore,
+    SCORE_JSON_SCHEMA,
     TRACK_ROLES,
 } from './score.mjs';
 
@@ -327,3 +329,64 @@ test('orders unsorted track events by their normalized beat', () => {
 test('rejects responses with invalid JSON', () => {
     assert.throws(() => parseScore('```json\n{bad json}\n```'), /invalid JSON/);
 });
+
+// Every object level of a strict-mode schema must be closed and fully required.
+function assertSchemaObjectsClosed(schema) {
+    if (!schema || typeof schema !== 'object') {
+        return;
+    }
+    if (schema.type === 'object'
+        || (Array.isArray(schema.type) && schema.type.includes('object'))
+        || schema.properties) {
+        assert.equal(schema.additionalProperties, false);
+        assert.ok(Array.isArray(schema.required));
+        for (const key of Object.keys(schema.properties ?? {})) {
+            assert.ok(schema.required.includes(key), `missing required key: ${key}`);
+        }
+    }
+    for (const value of Object.values(schema.properties ?? {})) {
+        assertSchemaObjectsClosed(value);
+    }
+    if (schema.items) {
+        assertSchemaObjectsClosed(schema.items);
+    }
+}
+
+test('SCORE_JSON_SCHEMA is strict-mode compliant at every object level', () => {
+    assertSchemaObjectsClosed(SCORE_JSON_SCHEMA);
+});
+
+test('normalizeResponseText unwraps known transport shapes', () => {
+    assert.equal(normalizeResponseText('{"a":1}'), '{"a":1}');
+    assert.equal(normalizeResponseText({ choices: [{ message: { content: '{"a":1}' } }] }), '{"a":1}');
+    assert.equal(normalizeResponseText({ choices: [{ text: 'plain text' }] }), 'plain text');
+    assert.equal(normalizeResponseText({ message: { content: 'inner' } }), 'inner');
+    assert.equal(
+        normalizeResponseText({ choices: [{ message: { content: [{ text: 'part1 ' }, { text: 'part2' }] } }] }),
+        'part1 part2',
+    );
+    assert.equal(normalizeResponseText(null), null);
+    assert.equal(normalizeResponseText(42), null);
+    assert.equal(normalizeResponseText({ tempo: 72 }), null);
+    assert.equal(normalizeResponseText({ choices: [{ message: { content: 5 } }] }), null);
+});
+
+test('parseScore unwraps a raw completion object', () => {
+    const parsed = parseScore({ choices: [{ message: { content: JSON.stringify(validScore) } }] });
+    assert.equal(parsed.tempo, 72);
+});
+
+test('parseScore unwraps fenced JSON inside a completion object', () => {
+    const parsed = parseScore({
+        choices: [{ message: { content: '```json\n' + JSON.stringify(validScore) + '\n```' } }],
+    });
+    assert.equal(parsed.tracks.length, 3);
+});
+
+test('parseScore treats an unwrappable completion object as a retryable failure', () => {
+    assert.throws(
+        () => parseScore({ choices: [{ message: { content: 5 } }] }),
+        /did not contain a JSON score/,
+    );
+});
+

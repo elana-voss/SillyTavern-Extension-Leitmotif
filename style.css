@@ -69,3 +69,20 @@
     margin-top: 0.5em;
     opacity: 0.8;
 }
+
+.st-leitmotif-settings .st-leitmotif-tempo label {
+    display: block;
+}
+
+.st-leitmotif-settings .st-leitmotif-tempo .checkbox_label {
+    margin-top: 0.6em;
+}
+
+.st-leitmotif-settings .st-leitmotif-feedback {
+    margin-top: 0.35em;
+    opacity: 0.85;
+}
+
+.st-leitmotif-settings .st-leitmotif-feedback:empty {
+    display: none;
+}

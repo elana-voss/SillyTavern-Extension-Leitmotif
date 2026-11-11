@@ -20,8 +20,8 @@
                 </div>
                 <small id="st_leitmotif_length_estimate">About 30 seconds at the selected tempo</small>
             </div>
-            <label class="st-leitmotif-control" for="st_leitmotif_tempo">
-                <span><b>Tempo</b> <output id="st_leitmotif_tempo_value" for="st_leitmotif_tempo">74 BPM</output></span>
+            <div class="st-leitmotif-control st-leitmotif-tempo">
+                <label for="st_leitmotif_tempo"><b>Tempo</b> <output id="st_leitmotif_tempo_value" for="st_leitmotif_tempo">74 BPM</output></label>
                 <input id="st_leitmotif_tempo" type="range" min="50" max="130" step="1" value="74" list="st_leitmotif_tempo_ticks" />
                 <datalist id="st_leitmotif_tempo_ticks">
                     <option value="50"></option>
@@ -30,12 +30,13 @@
                     <option value="110"></option>
                     <option value="130"></option>
                 </datalist>
-            </label>
-            <label class="checkbox_label" for="st_leitmotif_character_tempo">
-                <input id="st_leitmotif_character_tempo" type="checkbox" />
-                <span>Tempo follows the character</span>
-            </label>
-            <small>When enabled, the character analysis picks the BPM (50–130) and meter instead of the slider.</small>
+                <label class="checkbox_label" for="st_leitmotif_character_tempo">
+                    <input id="st_leitmotif_character_tempo" type="checkbox" />
+                    <span>Tempo follows the character</span>
+                </label>
+                <small>When enabled, the character analysis picks the BPM (50–130) and meter instead of the slider.</small>
+                <small id="st_leitmotif_tempo_feedback" class="st-leitmotif-feedback" role="status"></small>
+            </div>
             <label class="st-leitmotif-control" for="st_leitmotif_variety">
                 <span><b>Theme variety</b></span>
                 <select id="st_leitmotif_variety" class="text_pole">
@@ -57,11 +58,11 @@
             <button id="st_leitmotif_download" class="menu_button" type="button" disabled>
                 Download the generated theme as MIDI
             </button>
+            <div class="st-leitmotif-status" role="status">Ready when a character chat is open.</div>
             <details class="st-leitmotif-control st-leitmotif-brief">
                 <summary>Music brief of the last analysis</summary>
                 <div id="st_leitmotif_brief_body">No analysis yet.</div>
             </details>
-            <div class="st-leitmotif-status" role="status">Ready when a character chat is open.</div>
             <small>
                 Generates a short character-inspired instrumental using the active
                 SillyTavern generation backend. Audio samples and MIDI libraries
