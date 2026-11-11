@@ -149,11 +149,41 @@ function loadSettings() {
 function updateLengthEstimate() {
     const tempo = extension_settings[MODULE].tempo;
     const seconds = extension_settings[MODULE].lengthSeconds;
+    if (extension_settings[MODULE].characterTempo) {
+        $('#st_leitmotif_length_estimate').text(
+            `About ${seconds} seconds per loop; tempo and meter come from the character`,
+        );
+        return;
+    }
     const bars = getLoopBars(seconds, tempo);
     const actualSeconds = getApproximateDuration(bars, tempo);
     $('#st_leitmotif_length_estimate').text(
         `About ${actualSeconds} seconds (${bars} bars) at the selected tempo`,
     );
+}
+
+function updateBriefPreview(brief) {
+    const body = document.getElementById('st_leitmotif_brief_body');
+    if (!body) {
+        return;
+    }
+    if (!brief) {
+        body.textContent = 'No analysis yet.';
+        return;
+    }
+    const lines = [
+        brief.backdrop && `Backdrop — ${brief.backdrop}`,
+        brief.action && `Action — ${brief.action}`,
+        brief.twist && `Twist — ${brief.twist}`,
+        brief.traits.length > 0 && `Traits — ${brief.traits.join(', ')}`,
+        brief.arc && `Arc — ${brief.arc}`,
+        [brief.era, ...brief.genreReferences].some(Boolean) && `Style — ${[brief.era, ...brief.genreReferences].filter(Boolean).join('; ')}`,
+        `Language — ${[brief.key, brief.mode, brief.feel, brief.meter, brief.tempo ? `${brief.tempo} BPM` : '', brief.density].filter(Boolean).join(', ')}`,
+        brief.energyCurve.length > 0 && `Energy — ${brief.energyCurve.join(' -> ')}`,
+        brief.motif && `Motif — ${brief.motif.notes.join(' ')} (beats ${brief.motif.rhythm.join(' ')})${brief.motif.character ? `: ${brief.motif.character}` : ''}`,
+        brief.surprise && `Surprise — ${brief.surprise}`,
+    ].filter(Boolean);
+    body.textContent = lines.join('\n');
 }
 
 function loadScript(url, globalName) {
@@ -354,7 +384,9 @@ function briefCacheKey(character) {
 async function analyzeCharacter(character) {
     const key = briefCacheKey(character);
     if (briefCache.has(key)) {
-        return briefCache.get(key);
+        const cached = briefCache.get(key);
+        updateBriefPreview(cached);
+        return cached;
     }
     updateStatus(`Analyzing ${character.name}'s musical identity…`);
     const prompt = getBriefPrompt(character, {
@@ -371,11 +403,13 @@ async function analyzeCharacter(character) {
         const brief = parseBrief(response);
         if (brief) {
             briefCache.set(key, brief);
+            updateBriefPreview(brief);
             return brief;
         }
         console.warn(LOG_TAG, 'The model returned malformed brief JSON; retrying once.');
     }
     briefCache.set(key, null);
+    updateBriefPreview(null);
     return null;
 }
 
@@ -800,6 +834,26 @@ function bindSettings() {
             updateStatus(`New themes will use ${tempo} BPM.`);
         });
     $('#st_leitmotif_tempo_value').text(`${extension_settings[MODULE].tempo} BPM`);
+    $('#st_leitmotif_tempo').prop('disabled', extension_settings[MODULE].characterTempo);
+
+    $('#st_leitmotif_character_tempo')
+        .prop('checked', extension_settings[MODULE].characterTempo)
+        .on('change', function () {
+            extension_settings[MODULE].characterTempo = Boolean($(this).prop('checked'));
+            saveSettingsDebounced();
+            $('#st_leitmotif_tempo').prop('disabled', extension_settings[MODULE].characterTempo);
+            updateLengthEstimate();
+            updateStatus(extension_settings[MODULE].characterTempo
+                ? 'New themes will take their tempo from the character.'
+                : `New themes will use ${extension_settings[MODULE].tempo} BPM.`);
+        });
+
+    $('#st_leitmotif_variety')
+        .val(extension_settings[MODULE].variety)
+        .on('change', function () {
+            extension_settings[MODULE].variety = $(this).val();
+            saveSettingsDebounced();
+        });
 
     $('.st-leitmotif-instrument').each(function () {
         const role = $(this).attr('data-role');

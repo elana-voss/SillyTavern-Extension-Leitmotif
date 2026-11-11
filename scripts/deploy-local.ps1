@@ -10,6 +10,7 @@ $sourceFiles = @(
     'manifest.json',
     'index.js',
     'score.mjs',
+    'brief.mjs',
     'settings.html',
     'style.css'
 )

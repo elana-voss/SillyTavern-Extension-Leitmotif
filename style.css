@@ -30,6 +30,13 @@
     width: 100%;
 }
 
+.st-leitmotif-brief #st_leitmotif_brief_body {
+    margin-top: 0.5em;
+    white-space: pre-line;
+    opacity: 0.85;
+    font-size: 0.9em;
+}
+
 .st-leitmotif-length-options .menu_button[aria-pressed="true"] {
     border-color: var(--active);
     box-shadow: 0 0 0 1px var(--active);

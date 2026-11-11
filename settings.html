@@ -31,6 +31,19 @@
                     <option value="130"></option>
                 </datalist>
             </label>
+            <label class="checkbox_label" for="st_leitmotif_character_tempo">
+                <input id="st_leitmotif_character_tempo" type="checkbox" />
+                <span>Tempo follows the character</span>
+            </label>
+            <small>When enabled, the character analysis picks the BPM (50–130) and meter instead of the slider.</small>
+            <label class="st-leitmotif-control" for="st_leitmotif_variety">
+                <span><b>Theme variety</b></span>
+                <select id="st_leitmotif_variety" class="text_pole">
+                    <option value="focused">Focused — close to the character's core</option>
+                    <option value="standard">Standard</option>
+                    <option value="wild">Wild — takes more liberties each generation</option>
+                </select>
+            </label>
             <small>Themes play with sampled instruments in the browser and can also be downloaded as a MIDI file below.</small>
             <div class="st-leitmotif-control st-leitmotif-instruments">
                 <b>Instrument choices</b>
@@ -44,6 +57,10 @@
             <button id="st_leitmotif_download" class="menu_button" type="button" disabled>
                 Download the generated theme as MIDI
             </button>
+            <details class="st-leitmotif-control st-leitmotif-brief">
+                <summary>Music brief of the last analysis</summary>
+                <div id="st_leitmotif_brief_body">No analysis yet.</div>
+            </details>
             <div class="st-leitmotif-status" role="status">Ready when a character chat is open.</div>
             <small>
                 Generates a short character-inspired instrumental using the active
