@@ -1,6 +1,8 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string]$SillyTavernRoot = 'C:\path\to\SillyTavern'
+    # Path to your SillyTavern checkout. Pass it with -SillyTavernRoot or set
+    # the SILLYTAVERN_ROOT environment variable once and forget about it.
+    [string]$SillyTavernRoot = $env:SILLYTAVERN_ROOT
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,6 +20,10 @@ $sourceFiles = @(
 # scripts/download-samples.ps1 and is the big one (~300 MB of FluidR3 samples).
 $sourceDirs = @('lib', 'samples')
 $destination = Join-Path $SillyTavernRoot 'public\scripts\extensions\third-party\SillyTavern-Extension-Leitmotif'
+
+if ([string]::IsNullOrWhiteSpace($SillyTavernRoot)) {
+    throw 'Pass -SillyTavernRoot <path> or set the SILLYTAVERN_ROOT environment variable to your SillyTavern checkout.'
+}
 
 if (-not (Test-Path -LiteralPath $SillyTavernRoot -PathType Container)) {
     throw "SillyTavern root was not found: $SillyTavernRoot"
