@@ -1,6 +1,6 @@
 {
     "name": "sillytavern-extension-leitmotif",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "private": true,
     "description": "Leitmotif: a SillyTavern extension that composes and plays a looping theme for the current character.",
     "license": "LGPL-2.1-or-later",

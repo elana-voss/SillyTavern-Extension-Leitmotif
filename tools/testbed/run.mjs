@@ -5,8 +5,14 @@
 // the user is told. Writes a table to --out and prints a short summary; exits
 // 1 when a check fails.
 //
+// With --live <SillyTavern user data folder> the bed uses that user's backend
+// instead of the fake: it copies the folder's settings.json and secrets.json
+// (or the data root's) into the bed for the run only and deletes them after,
+// runs only generate, stop and download, and writes the backend's replies to
+// live-responses.json in the bed. Each live run is one paid generation.
+//
 // Usage: node tools/testbed/run.mjs --bed <bed folder> --pw <folder whose
-// node_modules holds playwright-core> [--out <results file>]
+// node_modules holds playwright-core> [--out <results file>] [--live <folder>]
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -18,7 +24,7 @@ import { startFakeLlm } from './fake-llm.mjs';
 import { syncExtension } from './sync.mjs';
 
 const { values } = parseArgs({
-    options: { bed: { type: 'string' }, pw: { type: 'string' }, out: { type: 'string' } },
+    options: { bed: { type: 'string' }, pw: { type: 'string' }, out: { type: 'string' }, live: { type: 'string' } },
 });
 const bed = values.bed ?? process.env.LEITMOTIF_BED;
 const pwFolder = values.pw ?? process.env.LEITMOTIF_PW;
@@ -29,6 +35,7 @@ if (!bed || !pwFolder) {
 const out = values.out ?? path.join(bed, 'results.txt');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const user = path.join(bed, 'data', 'default-user');
+const live = values.live;
 const { chromium } = createRequire(path.join(pwFolder, 'package.json'))('playwright-core');
 
 const IDLE_WITH_THEME = 'Theme ready. Generate another or download the MIDI.';
@@ -108,15 +115,16 @@ async function scenarios(page, fake) {
     await page.waitForFunction(() => SillyTavern.getContext().characterId !== undefined, null, { timeout: 30000 });
 
     // Generate, playback starts.
-    fake.setMode('ok');
+    fake?.setMode('ok');
     await clickToggle(page);
     let playing = true;
     try {
-        await waitForLabel(page, 'Stop Theme', 90000);
+        // A real model writes a score for minutes (about 5,000 tokens in the first live run).
+        await waitForLabel(page, 'Stop Theme', fake ? 90000 : 600000);
     } catch {
         playing = false;
     }
-    const kinds = fake.calls.map(call => call.kind).join(',');
+    const kinds = fake ? fake.calls.map(call => call.kind).join(',') : 'live';
     check('generate: playback starts (toolbar reads Stop Theme)', playing, `status "${await statusText(page)}"; calls ${kinds}`);
 
     // Stop.
@@ -137,10 +145,17 @@ async function scenarios(page, fake) {
         const file = path.join(bed, 'theme.mid');
         await download.saveAs(file);
         const header = fs.readFileSync(file).subarray(0, 4).toString('latin1');
+        const trackCount = fs.readFileSync(file).readUInt16BE(10);
         check('download: a .mid file with a MIDI header', download.suggestedFilename().endsWith('.mid') && header === 'MThd',
-            `${download.suggestedFilename()}, ${fs.statSync(file).size} bytes, header ${header}`);
+            `${download.suggestedFilename()}, ${fs.statSync(file).size} bytes, header ${header}, ${trackCount} tracks`);
     } catch (error) {
         check('download: a .mid file with a MIDI header', false, error.message);
+    }
+
+    if (!fake) {
+        const brief = (await page.locator('#st_leitmotif_brief_body').textContent())?.trim() ?? '';
+        check('live: the brief preview fills', brief.length > 0, brief.slice(0, 200));
+        return;
     }
 
     // Each failure of the score call: what the user is told, and the theme
@@ -168,9 +183,20 @@ async function scenarios(page, fake) {
 
 async function main() {
     syncExtension(repo, path.join(user, 'extensions', 'SillyTavern-Extension-Leitmotif'));
-    const fake = await startFakeLlm(0);
-    const template = fs.readFileSync(path.join(bed, 'settings.template.json'), 'utf8');
-    fs.writeFileSync(path.join(user, 'settings.json'), template.replaceAll('{FAKE_PORT}', String(fake.port)));
+    const fake = live ? null : await startFakeLlm(0);
+    const copied = [];
+    if (live) {
+        for (const name of ['settings.json', 'secrets.json']) {
+            const from = [path.join(live, name), path.join(live, '..', name)].find(file => fs.existsSync(file));
+            if (from) {
+                fs.copyFileSync(from, path.join(user, name));
+                copied.push(path.join(user, name));
+            }
+        }
+    } else {
+        const template = fs.readFileSync(path.join(bed, 'settings.template.json'), 'utf8');
+        fs.writeFileSync(path.join(user, 'settings.json'), template.replaceAll('{FAKE_PORT}', String(fake.port)));
+    }
 
     const port = await freePort();
     const log = fs.openSync(path.join(bed, 'sillytavern.log'), 'w');
@@ -181,14 +207,20 @@ async function main() {
 
     let browser;
     const consoleErrors = [];
+    const replies = [];
     try {
         await waitForHttp(`http://127.0.0.1:${port}/`, 120000);
         browser = await chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
         const context = await browser.newContext({ acceptDownloads: true });
         const page = await context.newPage();
         page.on('console', message => {
-            if (message.type() === 'error' && message.text().includes('[Leitmotif]')) {
-                consoleErrors.push(message.text());
+            if (['error', 'warning'].includes(message.type()) && message.text().includes('[Leitmotif]')) {
+                consoleErrors.push(`${message.type()}: ${message.text()}`);
+            }
+        });
+        page.on('response', async response => {
+            if (live && response.url().includes('/api/backends/chat-completions/generate')) {
+                replies.push(await response.json().catch(() => response.text()));
             }
         });
         await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
@@ -198,11 +230,17 @@ async function main() {
     } finally {
         await browser?.close();
         server.kill();
-        await fake.close();
+        await fake?.close();
+        for (const file of copied) {
+            fs.rmSync(file, { force: true });
+        }
+        if (live) {
+            fs.writeFileSync(path.join(bed, 'live-responses.json'), JSON.stringify(replies, null, 2));
+        }
     }
 
     const table = rows.map(row => `${row.ok ? 'PASS' : 'FAIL'}\t${row.name}\t${row.detail}`).join('\n');
-    fs.writeFileSync(out, `${table}\n\nLeitmotif console errors:\n${consoleErrors.join('\n')}\n`);
+    fs.writeFileSync(out, `${table}\n\nLeitmotif console errors and warnings:\n${consoleErrors.join('\n')}\n`);
     const failed = rows.filter(row => !row.ok);
     console.log(`test bed: ${rows.length - failed.length}/${rows.length} checks pass; table in ${out}`);
     for (const row of failed.slice(0, 8)) {

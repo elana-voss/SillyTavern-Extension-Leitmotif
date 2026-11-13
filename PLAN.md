@@ -32,7 +32,7 @@ Left as it is: the 300 MB of samples inside the repo (a deliberate choice for an
 |---|---|---|---|---|---|---|---|
 | 1 | Defects 1-7 and a test bed | R1 | Done | Must | 3M | 0 | 5.6M (two agents, a hand-over at the context limit; most of it cache reads at 40-60k context per turn), 0; code review none (not due) |
 | 2 | Structure: modules, shared helpers, tests | R1 | Done | Must | 4M | 0 | 4.5M (two agents, a hand-over at the context limit, and the review), 0; code review Fable 5.2 medium |
-| 3 | One live run and close | R1 | In progress | Must | 1M | about 15k on the owner's SillyTavern backend | |
+| 3 | One live run and close | R1 | Done | Must | 1M | about 15k on the owner's SillyTavern backend | Claude: (main session fills in), provider 18,741 tokens (two generations, as the backend reported them); code review none (not due) |
 | | Total | | | | 8M | about 15k | |
 
 Each milestone ends with the tests passing and the extension working in a local SillyTavern on the test bed.
@@ -53,6 +53,8 @@ Tests: 49 unit (`npm test`), test bed 11 of 11.
 
 One theme generated through the owner's configured backend with the finished code, played and downloaded; findings fixed; version 0.2.0, pushed.
 
+Done: through the owner's backend (NanoGPT, GLM 5.3) on the test bed, the brief preview filled, a five-track 3/4 theme at 78 BPM played, stopped and downloaded as a valid five-track MIDI file, with no warnings about dropped or moved notes. The first try failed only because the bed waited 90 s for a score the model took longer to write; the bed now waits up to 10 minutes on a live run. Tests: 49 unit, test bed 11 of 11 on the fake, 4 of 4 live. Next: none; the list is done.
+
 ## Questions for the owner
 
 None open.
@@ -68,6 +70,7 @@ None open.
 - `package.json` has no `"type": "module"`; every file under `src/` and `tests/` is `.mjs`. Its licence field is `LGPL-2.1-or-later`, as `LICENSE` says.
 - Defect fixed in the move: the brief prompt escaped the already escaped profile a second time (tags reached the model as `&lt;description&gt;`); test in `tests/brief.test.mjs`.
 - Defect fixed after the review: the move had dropped the backslash from the characters the MIDI file name replaces; test in `tests/midi-export.test.mjs`.
+- The bed's live run: `run.mjs --live <SillyTavern user data folder>` copies that user's `settings.json` and `secrets.json` into the bed for the run only, deletes them after, runs generate, stop and download, and writes the backend's replies to `live-responses.json` in the bed; it waits up to 10 minutes for the score (a real model wrote about 5,000 tokens for it).
 - `deploy-local.ps1` always copies `lib/` and `src/`, `samples/` only when its size differs; the bed's `sync.mjs` leaves out `tests/`.
 
 ## Trials
