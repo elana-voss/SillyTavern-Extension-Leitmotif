@@ -32,8 +32,8 @@ Left as it is: the 300 MB of samples inside the repo (a deliberate choice for an
 |---|---|---|---|---|---|---|---|
 | 1 | Defects 1-7 and a test bed | R1 | Done | Must | 3M | 0 | 5.6M (two agents, a hand-over at the context limit; most of it cache reads at 40-60k context per turn), 0; code review none (not due) |
 | 2 | Structure: modules, shared helpers, tests | R1 | Done | Must | 4M | 0 | 4.5M (two agents, a hand-over at the context limit, and the review), 0; code review Fable 5.2 medium |
-| 3 | One live run and close | R1 | Done | Must | 1M | about 15k on the owner's SillyTavern backend | Claude: (main session fills in), provider 18,741 tokens (two generations, as the backend reported them); code review none (not due) |
-| | Total | | | | 8M | about 15k | |
+| 3 | One live run and close | R1 | Done | Must | 1M | about 15k on the owner's SillyTavern backend | Claude 1.6M, provider 18,741 tokens (two generations, as the backend reported them); code review none (not due) |
+| | Total | | | | 8M | about 15k | 11.7M Claude; 18,741 provider (the backend reported 0 USD) |
 
 Each milestone ends with the tests passing and the extension working in a local SillyTavern on the test bed.
 
