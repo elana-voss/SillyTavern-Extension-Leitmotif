@@ -31,8 +31,8 @@ Left as it is: the 300 MB of samples inside the repo (a deliberate choice for an
 | # | Milestone | Requirement | Status | Priority | Claude tokens | Provider tokens | Actual |
 |---|---|---|---|---|---|---|---|
 | 1 | Defects 1-7 and a test bed | R1 | Done | Must | 3M | 0 | 5.6M (two agents, a hand-over at the context limit; most of it cache reads at 40-60k context per turn), 0; code review none (not due) |
-| 2 | Structure: modules, shared helpers, tests | R1 | In progress | Must | 4M | 0 | |
-| 3 | One live run and close | R1 | Planned | Must | 1M | about 15k on the owner's SillyTavern backend | |
+| 2 | Structure: modules, shared helpers, tests | R1 | Done | Must | 4M | 0 | not yet measured, 0; code review by Fable 5.1 medium: 1 finding, fixed |
+| 3 | One live run and close | R1 | In progress | Must | 1M | about 15k on the owner's SillyTavern backend | |
 | | Total | | | | 8M | about 15k | |
 
 Each milestone ends with the tests passing and the extension working in a local SillyTavern on the test bed.
@@ -46,6 +46,8 @@ Done: 40 unit tests (`node --test score.test.mjs brief.test.mjs status.test.mjs`
 ### 2. Structure: modules, shared helpers, tests
 
 `index.js` keeps only SillyTavern wiring and the settings panel; the composer prompt, playback (with loop-point search) and MIDI export become their own modules; one shared escape and one shared JSON extraction; code under `src/`, tests under `tests/`, a `package.json` with `npm test`; tests for the composer prompt and the loop-point search; `deploy-local.ps1` and the README follow. What the user sees does not change. Code review due (over 300 lines moved).
+
+Tests: 49 unit (`npm test`), test bed 11 of 11.
 
 ### 3. One live run and close
 
@@ -62,6 +64,11 @@ None open.
 - Every idle status text comes from one shared `status.mjs`; the brief cache is `createBriefCache` in `brief.mjs`, keyed by character and tempo hint.
 - SillyTavern limit: its server's chat-completions endpoint (`src/endpoints/backends/chat-completions.js`, the `/generate` route's non-OK branch) passes on only the provider's HTTP status text, never its body; the extension's toast names that text ("Unauthorized", "Internal Server Error") and SillyTavern's server console logs the body.
 - The bed copies an installed SillyTavern without its globally installed extensions (an older copy of this one loaded beside the deployed copy) and uses playwright-core copied from the local npm cache into the bed's task folder, outside the repo; it stays on disk for milestones 2 and 3.
+- `npm test` runs `node --test "tests/**/*.test.mjs"`: Node 24 does not take a bare folder for `--test`.
+- `package.json` has no `"type": "module"`; every file under `src/` and `tests/` is `.mjs`. Its licence field is `LGPL-2.1-or-later`, as `LICENSE` says.
+- Defect fixed in the move: the brief prompt escaped the already escaped profile a second time (tags reached the model as `&lt;description&gt;`); test in `tests/brief.test.mjs`.
+- Defect fixed after the review: the move had dropped the backslash from the characters the MIDI file name replaces; test in `tests/midi-export.test.mjs`.
+- `deploy-local.ps1` always copies `lib/` and `src/`, `samples/` only when its size differs; the bed's `sync.mjs` leaves out `tests/`.
 
 ## Trials
 
