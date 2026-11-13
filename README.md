@@ -24,7 +24,7 @@ The settings panel holds the rest: theme length (15 seconds to 2 minutes), tempo
 
 ## Development
 
-Tests: `node --test score.test.mjs brief.test.mjs`. `scripts/deploy-local.ps1` copies the extension into a local SillyTavern checkout.
+Code lives in `src/` (pure modules, no SillyTavern imports; `index.js` is the SillyTavern entry), tests in `tests/`: `npm test` (Node 22 or later, no dependencies). `scripts/deploy-local.ps1` copies the extension into a local SillyTavern checkout.
 
 ## Credits and Licenses
 

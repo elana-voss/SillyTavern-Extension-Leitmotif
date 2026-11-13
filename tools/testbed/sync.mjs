@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const NOT_SHIPPED = new Set(['.git', '.claude', 'tools', 'node_modules', 'CLAUDE.md', 'PLAN.md']);
+const NOT_SHIPPED = new Set(['.git', '.claude', 'tools', 'tests', 'node_modules', 'CLAUDE.md', 'PLAN.md']);
 
 export function syncExtension(repo, target) {
     const hasSamples = fs.existsSync(path.join(target, 'samples'));

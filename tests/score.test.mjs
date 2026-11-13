@@ -5,11 +5,10 @@ import {
     getApproximateDuration,
     getLoopBars,
     INSTRUMENTS,
-    normalizeResponseText,
     parseScore,
     SCORE_JSON_SCHEMA,
     TRACK_ROLES,
-} from './score.mjs';
+} from '../src/score.mjs';
 
 const validScore = {
     tempo: 72,
@@ -402,21 +401,6 @@ function assertSchemaObjectsClosed(schema) {
 
 test('SCORE_JSON_SCHEMA is strict-mode compliant at every object level', () => {
     assertSchemaObjectsClosed(SCORE_JSON_SCHEMA);
-});
-
-test('normalizeResponseText unwraps known transport shapes', () => {
-    assert.equal(normalizeResponseText('{"a":1}'), '{"a":1}');
-    assert.equal(normalizeResponseText({ choices: [{ message: { content: '{"a":1}' } }] }), '{"a":1}');
-    assert.equal(normalizeResponseText({ choices: [{ text: 'plain text' }] }), 'plain text');
-    assert.equal(normalizeResponseText({ message: { content: 'inner' } }), 'inner');
-    assert.equal(
-        normalizeResponseText({ choices: [{ message: { content: [{ text: 'part1 ' }, { text: 'part2' }] } }] }),
-        'part1 part2',
-    );
-    assert.equal(normalizeResponseText(null), null);
-    assert.equal(normalizeResponseText(42), null);
-    assert.equal(normalizeResponseText({ tempo: 72 }), null);
-    assert.equal(normalizeResponseText({ choices: [{ message: { content: 5 } }] }), null);
 });
 
 test('parseScore unwraps a raw completion object', () => {

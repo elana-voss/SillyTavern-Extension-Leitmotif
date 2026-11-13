@@ -10,7 +10,7 @@ import {
     sampleVarietySeed,
     varietySeedToBriefAddition,
     createBriefCache,
-} from './brief.mjs';
+} from '../src/brief.mjs';
 
 const fullBrief = {
     backdrop: 'A frozen harbor town under aurora light',
@@ -122,6 +122,8 @@ test('the analysis prompt carries the profile and the layer mapping', () => {
     );
     assert.match(prompt, /backdrop .*->/s);
     assert.match(prompt, /Vera &amp; Co/);
+    // profileFields arrive escaped and tagged from buildCharacterProfile: placed as they are, never escaped twice.
+    assert.ok(prompt.includes('<description>Frozen harbor</description>'));
     assert.match(prompt, /Aim near 74 BPM/);
     assert.match(prompt, /50 to 130 BPM/);
     for (const mode of BRIEF_MODES) {

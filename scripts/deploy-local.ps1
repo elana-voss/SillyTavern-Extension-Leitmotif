@@ -11,15 +11,12 @@ $sourceRoot = Split-Path -Parent $PSScriptRoot
 $sourceFiles = @(
     'manifest.json',
     'index.js',
-    'score.mjs',
-    'brief.mjs',
-    'status.mjs',
     'settings.html',
     'style.css'
 )
 # Directories that ship with the extension; samples/ is populated by
 # scripts/download-samples.ps1 and is the big one (~300 MB of FluidR3 samples).
-$sourceDirs = @('lib', 'samples')
+$sourceDirs = @('lib', 'samples', 'src')
 $destination = Join-Path $SillyTavernRoot 'public\scripts\extensions\third-party\SillyTavern-Extension-Leitmotif'
 
 if ([string]::IsNullOrWhiteSpace($SillyTavernRoot)) {
@@ -60,12 +57,13 @@ foreach ($dir in $sourceDirs) {
     $target = Join-Path $destination $dir
     if ($PSCmdlet.ShouldProcess($target, "Sync directory $dir")) {
         New-Item -ItemType Directory -Path $target -Force | Out-Null
-        # Samples never change once fetched, so only copy what is missing or
-        # has a different size; redeploys stay fast instead of recopying 300 MB.
+        # Samples never change once fetched, so only copy those missing or
+        # of a different size; redeploys stay fast instead of recopying 300 MB.
         foreach ($file in Get-ChildItem -LiteralPath $source -File -Recurse) {
             $relative = $file.FullName.Substring($source.Length).TrimStart('\', '/')
             $targetFile = Join-Path $target $relative
-            $needsCopy = -not (Test-Path -LiteralPath $targetFile -PathType Leaf)
+            # Code (lib/, src/) is always copied: an edit can keep a file's size.
+            $needsCopy = $dir -ne 'samples' -or -not (Test-Path -LiteralPath $targetFile -PathType Leaf)
             if (-not $needsCopy) {
                 $needsCopy = (Get-Item -LiteralPath $targetFile).Length -ne $file.Length
             }

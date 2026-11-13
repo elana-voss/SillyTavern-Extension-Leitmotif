@@ -1,7 +1,9 @@
 // The character's musical brief: its schema and prompt, parsing the model's
 // answer, the per-session cache (keyed by character and tempo hint, never
 // storing a failed analysis) and the variety seed.
-import { clampNoteOctave, normalizeResponseText } from './score.mjs';
+import { readJsonObject } from './model-response.mjs';
+import { clampNoteOctave } from './score.mjs';
+import { escapeXml } from './xml.mjs';
 
 export const BRIEF_MODES = Object.freeze([
     'ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'harmonic_minor', 'melodic_minor',
@@ -91,13 +93,6 @@ const MAX_FIELDS = {
     short: 80,
 };
 
-function escapeXml(value) {
-    return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
-
 function asText(value, maxLength = MAX_FIELDS.text) {
     return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
@@ -164,39 +159,18 @@ Rules:
 
 <character_profile>
 <name>${escapeXml(character.name)}</name>
-${escapeXml(character.profileFields)}
+${character.profileFields}
 </character_profile>`;
 }
 
 // Fail-soft by design: a partial or eccentric brief still produces music, so
 // content problems degrade into sensible defaults instead of failing the run.
 export function parseBrief(response) {
-    const text = normalizeResponseText(response);
-    let value = response;
-
-    if (text !== null) {
-        const cleaned = text
-            .trim()
-            .replace(/^```(?:json)?\s*/i, '')
-            .replace(/\s*```$/, '');
-        const start = cleaned.indexOf('{');
-        const end = cleaned.lastIndexOf('}');
-        if (start < 0 || end < start) {
-            return null;
-        }
-
-        try {
-            value = JSON.parse(cleaned.slice(start, end + 1));
-        } catch {
-            return null;
-        }
-    }
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return null;
-    }
-    // An API payload that never unwrapped to text is a failed extraction,
-    // not a brief: fail soft to null so the caller can retry.
-    if (text === null && (Array.isArray(value.choices) || (value.message && typeof value.message === 'object'))) {
+    let value;
+    try {
+        value = readJsonObject(response, 'brief');
+    } catch {
+        // Fail soft: a missing or broken brief lets the caller ask once more.
         return null;
     }
 
