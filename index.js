@@ -1,3 +1,5 @@
+// Leitmotif's SillyTavern wiring: the settings panel, the toolbar button, the
+// character analysis and score calls, sampled playback and MIDI export.
 import { generateRaw, saveSettingsDebounced } from '../../../../script.js';
 import {
     extension_settings,

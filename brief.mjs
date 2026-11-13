@@ -1,3 +1,6 @@
+// The character's musical brief: its schema and prompt, parsing the model's
+// answer, the per-session cache (keyed by character and tempo hint, never
+// storing a failed analysis) and the variety seed.
 import { clampNoteOctave, normalizeResponseText } from './score.mjs';
 
 export const BRIEF_MODES = Object.freeze([

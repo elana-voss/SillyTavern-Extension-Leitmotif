@@ -1,3 +1,4 @@
+// Tests for status.mjs: the idle status text.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getIdleStatus } from './status.mjs';

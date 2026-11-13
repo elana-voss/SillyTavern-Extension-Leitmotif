@@ -30,7 +30,7 @@ Left as it is: the 300 MB of samples inside the repo (a deliberate choice for an
 
 | # | Milestone | Requirement | Status | Priority | Claude tokens | Provider tokens | Actual |
 |---|---|---|---|---|---|---|---|
-| 1 | Defects 1-7 and a test bed | R1 | In progress | Must | 3M | 0 | |
+| 1 | Defects 1-7 and a test bed | R1 | Done | Must | 3M | 0 | |
 | 2 | Structure: modules, shared helpers, tests | R1 | Planned | Must | 4M | 0 | |
 | 3 | One live run and close | R1 | Planned | Must | 1M | about 15k on the owner's SillyTavern backend | |
 | | Total | | | | 8M | about 15k | |
@@ -40,6 +40,8 @@ Each milestone ends with the tests passing and the extension working in a local 
 ### 1. Defects 1-7 and a test bed
 
 Defects 1-7 above, one test each where code changes. A test bed: a SillyTavern checkout in a temporary folder outside the repo with this extension deployed, a local fake OpenAI-style server answering the two calls (and failing: refused, 500, cut reply, invalid JSON), driven by a headless browser: generate, playback starts, stop, download a `.mid`. Removed when the list is done.
+
+Done: 40 unit tests (`node --test score.test.mjs brief.test.mjs status.test.mjs`) and the bed's 11 checks pass (`node tools/testbed/run.mjs --bed <bed> --pw <playwright-core folder>`). Next: milestone 2.
 
 ### 2. Structure: modules, shared helpers, tests
 
@@ -57,6 +59,9 @@ None open.
 
 - The list above, 8M Claude tokens and about 15k provider tokens: the owner's "go", 2026-11-13.
 - Defect 6: the meter keeps following the character always; only the words change.
+- Every idle status text comes from one shared `status.mjs`; the brief cache is `createBriefCache` in `brief.mjs`, keyed by character and tempo hint.
+- SillyTavern limit: its server's chat-completions endpoint (`src/endpoints/backends/chat-completions.js`, the `/generate` route's non-OK branch) passes on only the provider's HTTP status text, never its body; the extension's toast names that text ("Unauthorized", "Internal Server Error") and SillyTavern's server console logs the body.
+- The bed copies an installed SillyTavern without its globally installed extensions (an older copy of this one loaded beside the deployed copy) and uses playwright-core copied from the local npm cache into the bed's task folder, outside the repo; it stays on disk for milestones 2 and 3.
 
 ## Trials
 

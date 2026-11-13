@@ -1,3 +1,4 @@
+// Tests for score.mjs: parsing and repairing a generated score.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {

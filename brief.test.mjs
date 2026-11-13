@@ -1,3 +1,4 @@
+// Tests for brief.mjs: prompt, schema, parsing, the brief cache and the variety seed.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
