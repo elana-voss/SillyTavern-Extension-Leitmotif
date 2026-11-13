@@ -8,6 +8,7 @@ import {
     parseBrief,
     sampleVarietySeed,
     varietySeedToBriefAddition,
+    createBriefCache,
 } from './brief.mjs';
 
 const fullBrief = {
@@ -171,4 +172,31 @@ test('parseBrief accepts an already-parsed brief object', () => {
     const parsed = parseBrief(fullBrief);
     assert.equal(parsed.tempo, 96);
     assert.deepEqual(parsed.motif.notes, ['A3', 'C4', 'D3']);
+});
+
+test('moves motif notes in octave 0 or 7 and above into range instead of dropping them', () => {
+    const brief = parseBrief(JSON.stringify({
+        ...fullBrief,
+        motif: { notes: ['A0', 'C7', 'E4'], rhythm: [0.5, 1, 1.5], character: 'x' },
+    }));
+    assert.deepEqual(brief.motif.notes, ['A1', 'C6', 'E4']);
+    assert.deepEqual(brief.motif.rhythm, [0.5, 1, 1.5]);
+});
+
+test('the brief cache keeps no failed analysis', () => {
+    const cache = createBriefCache();
+    const character = { name: 'Mira', profileFields: 'smuggler' };
+    cache.set(character, null, null);
+    assert.equal(cache.has(character, null), false);
+    cache.set(character, null, { tempo: 80 });
+    assert.deepEqual(cache.get(character, null), { tempo: 80 });
+});
+
+test('the brief cache tells a brief made with a tempo hint from one made without', () => {
+    const cache = createBriefCache();
+    const character = { name: 'Mira', profileFields: 'smuggler' };
+    cache.set(character, 72, { tempo: 72 });
+    assert.equal(cache.has(character, null), false);
+    assert.equal(cache.has(character, 90), false);
+    assert.equal(cache.has(character, 72), true);
 });

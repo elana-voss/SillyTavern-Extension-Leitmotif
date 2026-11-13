@@ -153,6 +153,19 @@ export const METERS = Object.freeze({
 });
 
 export const NOTE_PATTERN = /^[A-G](?:#|b)?[1-6]$/;
+// What a model may write: any octave. Notes outside 1-6 are moved into range
+// by clampNoteOctave, never dropped.
+const ANY_OCTAVE_NOTE = /^([A-G](?:#|b)?)(\d+)$/;
+
+// A note name with its octave moved into minimum..maximum, or null when the
+// text is no note name.
+export function clampNoteOctave(note, minimum = 1, maximum = 6) {
+    const match = ANY_OCTAVE_NOTE.exec(note);
+    if (!match) {
+        return null;
+    }
+    return `${match[1]}${Math.max(minimum, Math.min(maximum, Number(match[2])))}`;
+}
 
 // Structured output for the composition call. This is a strict-mode-compliant
 // shape envelope (every key required, optionals nullable, closed objects);
@@ -290,15 +303,12 @@ function normalizeNumber(value) {
 }
 
 function normalizeNoteOctave(note, role) {
-    const [, pitch, octaveText] = note.match(/^([A-G](?:#|b)?)([1-6])$/);
-    const octave = Number(octaveText);
     const [minimum, maximum] = role === 'bass'
         ? [1, 2]
         : role === 'harmony' || role === 'texture'
             ? [2, 6]
             : [3, 6];
-    const normalizedOctave = Math.max(minimum, Math.min(maximum, octave));
-    return `${pitch}${normalizedOctave}`;
+    return clampNoteOctave(note, minimum, maximum);
 }
 
 export function parseScore(response, {
@@ -346,7 +356,9 @@ export function parseScore(response, {
         throw new Error('The model response did not contain a JSON score.');
     }
 
-    if (!Number.isFinite(value.tempo) || value.tempo < MIN_TEMPO || value.tempo > MAX_TEMPO) {
+    // The model's own tempo matters only when no target tempo replaces it.
+    if (targetTempo === undefined
+        && (!Number.isFinite(value.tempo) || value.tempo < MIN_TEMPO || value.tempo > MAX_TEMPO)) {
         throw new Error(`Score tempo must be a number from ${MIN_TEMPO} to ${MAX_TEMPO} BPM.`);
     }
 
@@ -421,7 +433,7 @@ export function parseScore(response, {
                 const usableNotes = (Array.isArray(rawNotes) ? rawNotes : [])
                     .filter(note => typeof note === 'string')
                     .map(note => note.trim().replace(/^([a-g])/, letter => letter.toUpperCase()))
-                    .filter(note => NOTE_PATTERN.test(note));
+                    .filter(note => ANY_OCTAVE_NOTE.test(note));
                 if (usableNotes.length === 0) {
                     console.warn(`[Leitmotif] Track ${index + 1}, event ${eventIndex + 1} has no usable notes; dropped the event.`);
                     return null;

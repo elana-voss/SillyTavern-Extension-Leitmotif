@@ -13,6 +13,7 @@ $sourceFiles = @(
     'index.js',
     'score.mjs',
     'brief.mjs',
+    'status.mjs',
     'settings.html',
     'style.css'
 )

@@ -15,6 +15,7 @@ import {
 } from './score.mjs';
 import {
     BRIEF_JSON_SCHEMA,
+    createBriefCache,
     getBriefPrompt,
     musicBriefToPromptSection,
     parseBrief,
@@ -22,6 +23,7 @@ import {
     varietySeedToBriefAddition,
     VARIETY_LEVELS,
 } from './brief.mjs';
+import { getIdleStatus } from './status.mjs';
 
 const MODULE = 'leitmotif';
 const LEGACY_MODULE = 'vibeComposerMidi';
@@ -397,26 +399,20 @@ function handleToolbarClick() {
     }
 }
 
-const briefCache = new Map();
-
-function briefCacheKey(character) {
-    return `${character.name}\u0000${character.profileFields}`;
-}
+const briefCache = createBriefCache();
 
 // Stage 1 of a generation: turn the character card into a music brief. Cached
-// per character so repeat generations pay for composition only; the brief is
-// the character's identity and does not change between clicks.
+// per character and tempo hint so repeat generations pay for composition
+// only; a failed analysis is not cached, so the next theme asks again.
 async function analyzeCharacter(character) {
-    const key = briefCacheKey(character);
-    if (briefCache.has(key)) {
-        const cached = briefCache.get(key);
+    const tempoHint = extension_settings[MODULE].characterTempo ? null : extension_settings[MODULE].tempo;
+    if (briefCache.has(character, tempoHint)) {
+        const cached = briefCache.get(character, tempoHint);
         updateBriefPreview(cached);
         return cached;
     }
     updateStatus(`Analyzing ${character.name}'s musical identity…`);
-    const prompt = getBriefPrompt(character, {
-        tempoHint: extension_settings[MODULE].characterTempo ? null : extension_settings[MODULE].tempo,
-    });
+    const prompt = getBriefPrompt(character, { tempoHint });
     for (let attempt = 0; attempt < 2; attempt += 1) {
         const response = await generateRaw({
             prompt: attempt === 0
@@ -434,13 +430,12 @@ async function analyzeCharacter(character) {
         });
         const brief = parseBrief(response);
         if (brief) {
-            briefCache.set(key, brief);
+            briefCache.set(character, tempoHint, brief);
             updateBriefPreview(brief);
             return brief;
         }
         console.warn(LOG_TAG, 'The model returned malformed brief JSON; retrying once.');
     }
-    briefCache.set(key, null);
     updateBriefPreview(null);
     return null;
 }
@@ -526,7 +521,7 @@ function stopPlayback() {
     }
     activePlayers = [];
     updateToolbar();
-    updateStatus(currentScore ? 'Theme ready. Generate another or download the MIDI.' : 'Ready when a character chat is open.');
+    updateStatus(getIdleStatus(Boolean(currentScore)));
 }
 
 function noteToMidiNumber(note) {
@@ -791,7 +786,7 @@ async function handleGenerateClick() {
     } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         console.error(LOG_TAG, 'Theme generation or playback failed:', error);
-        updateStatus('Ready when a character chat is open.');
+        updateStatus(getIdleStatus(Boolean(currentScore)));
         toastr.error(detail, 'Leitmotif', { timeOut: 12000, extendedTimeOut: 2000 });
     } finally {
         generating = false;
@@ -840,7 +835,7 @@ function downloadMidi() {
     }).catch(error => {
         console.error(LOG_TAG, 'MIDI export failed:', error);
         const detail = error instanceof Error ? error.message : String(error);
-        updateStatus(currentScore ? 'Theme ready. Generate another or download the MIDI.' : 'Ready when a character chat is open.');
+        updateStatus(getIdleStatus(Boolean(currentScore)));
         toastr.error(detail, 'Leitmotif', { timeOut: 12000, extendedTimeOut: 2000 });
     });
 }

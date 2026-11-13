@@ -437,3 +437,18 @@ test('parseScore treats an unwrappable completion object as a retryable failure'
     );
 });
 
+
+test('uses the target tempo even when the model named a tempo outside 50-130', () => {
+    const parsed = parseScore({ ...validScore, tempo: 180 }, { targetTempo: 90 });
+    assert.equal(parsed.tempo, 90);
+    assert.equal(parseScore({ ...validScore, tempo: undefined }, { targetTempo: 60 }).tempo, 60);
+});
+
+test('moves notes in octave 0 or 7 and above into the role range instead of dropping them', () => {
+    const response = structuredClone(validScore);
+    response.tracks[1].events[0].notes = 'E0';
+    response.tracks[2].events[0].notes = ['C7', 'D8'];
+    const parsed = parseScore(response);
+    assert.deepEqual(parsed.tracks[1].events[0].notes, ['E1']);
+    assert.deepEqual(parsed.tracks[2].events[0].notes, ['C6', 'D6']);
+});

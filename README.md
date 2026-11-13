@@ -14,13 +14,13 @@ https://github.com/elana-voss/SillyTavern-Extension-Leitmotif
 
 Expect a large first download, about 300 MB: the instrument samples are inside the repository. Later updates are small.
 
-Then open a character chat and click the music icon next to the input box.
+Then open a character chat and choose Generate Theme in the Extensions menu (the wand icon next to the input box).
 
 ## Use
 
 Generate Theme choice in the Extensions menu writes a theme for the current character and plays it. While it plays, the button becomes Stop Theme. Download the generated theme as MIDI saves the result.
 
-The settings panel holds the rest: theme length (15 seconds to 2 minutes), tempo and meter, Tempo follows the character (the analysis picks BPM and meter, on by default), and Theme variety (Focused / Standard / Wild). It also shows the music brief of the last analysis.
+The settings panel holds the rest: theme length (15 seconds to 2 minutes), tempo, Tempo follows the character (the analysis picks the BPM, on by default), and Theme variety (Focused / Standard / Wild). The meter (3/4 or 4/4) always comes from the analysis. It also shows the music brief of the last analysis.
 
 ## Development
 

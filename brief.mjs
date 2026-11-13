@@ -1,4 +1,4 @@
-import { NOTE_PATTERN, normalizeResponseText } from './score.mjs';
+import { clampNoteOctave, normalizeResponseText } from './score.mjs';
 
 export const BRIEF_MODES = Object.freeze([
     'ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'harmonic_minor', 'melodic_minor',
@@ -119,6 +119,23 @@ function pickEnum(value, allowed, fallback = null) {
 
 // The profile layers map onto musical layers; the analysis call leans on these
 // so different characters land in genuinely different musical places.
+// Briefs per character and tempo hint, so repeat generations pay for
+// composition only. A failed analysis (null) is never kept: the next theme
+// asks again. The tempo hint is part of the key because it shapes the brief.
+export function createBriefCache() {
+    const briefs = new Map();
+    const keyOf = (character, tempoHint) => `${character.name}\u0000${character.profileFields}\u0000${tempoHint ?? ''}`;
+    return {
+        has: (character, tempoHint) => briefs.has(keyOf(character, tempoHint)),
+        get: (character, tempoHint) => briefs.get(keyOf(character, tempoHint)),
+        set(character, tempoHint, brief) {
+            if (brief) {
+                briefs.set(keyOf(character, tempoHint), brief);
+            }
+        },
+    };
+}
+
 export function getBriefPrompt(character, { tempoHint = null } = {}) {
     const hintLine = tempoHint
         ? `Aim near ${tempoHint} BPM unless the character clearly argues for another tempo.`
@@ -181,7 +198,8 @@ export function parseBrief(response) {
     }
 
     const motifNotes = asTextList(value.motif?.notes, { count: 7, length: 4 })
-        .filter(note => NOTE_PATTERN.test(note));
+        .map(note => clampNoteOctave(note))
+        .filter(Boolean);
     const motifRhythm = (Array.isArray(value.motif?.rhythm) ? value.motif.rhythm : [])
         .slice(0, motifNotes.length)
         .map(Number)
