@@ -5,7 +5,7 @@ import { INSTRUMENTS } from './score.mjs';
 const TICKS_PER_BEAT = 128;
 
 export function getMidiFileName(characterName) {
-    const safeName = characterName.replace(/[<>:"/\|?*\u0000-\u001f]/g, '_').trim() || 'character';
+    const safeName = characterName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim() || 'character';
     return `${safeName}-theme.mid`;
 }
 
