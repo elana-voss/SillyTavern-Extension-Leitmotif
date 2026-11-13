@@ -1,6 +1,7 @@
 // Builds the test bed once: a copy of an existing SillyTavern install (with
 // its node_modules, without its data, config or git history; SillyTavern
-// writes its default config on first start) in a folder
+// writes its default config on first start, without its globally installed
+// extensions) in a folder
 // outside the repo, a fresh data folder whose settings point the Chat
 // Completion "Custom" source at the fake server, and this extension deployed
 // as a user extension. run.mjs syncs the extension's code before every run.
@@ -22,11 +23,18 @@ if (!source || !bed) {
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const target = path.join(bed, 'SillyTavern');
 const skipped = new Set(['.git', 'backups', 'data', 'config.yaml']);
+// Extensions installed for all users of the source install: an older copy of
+// this one there would load beside the deployed copy and answer clicks.
+const globalExtensions = path.join('public', 'scripts', 'extensions', 'third-party');
 
 if (!fs.existsSync(path.join(target, 'server.js'))) {
     fs.cpSync(source, target, {
         recursive: true,
-        filter: from => !skipped.has(path.relative(source, from).split(path.sep)[0]),
+        filter: from => {
+            const relative = path.relative(source, from);
+            return !skipped.has(relative.split(path.sep)[0])
+                && !relative.startsWith(globalExtensions + path.sep);
+        },
     });
 }
 

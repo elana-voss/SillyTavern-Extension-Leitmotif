@@ -32,11 +32,12 @@ const user = path.join(bed, 'data', 'default-user');
 const { chromium } = createRequire(path.join(pwFolder, 'package.json'))('playwright-core');
 
 const IDLE_WITH_THEME = 'Theme ready. Generate another or download the MIDI.';
-// What the user must be told per failure: the toast names the provider's own
-// words where the provider sent some.
+// What the extension's own toast must tell the user per failure. SillyTavern's
+// server passes on only the provider's HTTP status text, never its body (its
+// chat-completions endpoint), so that text is what the toast can name.
 const FAILURES = [
-    { mode: 'refused', toast: /Incorrect API key/ },
-    { mode: 'error500', toast: /fake server had an error/ },
+    { mode: 'refused', toast: /Unauthorized/ },
+    { mode: 'error500', toast: /Internal Server Error/ },
     { mode: 'cut', toast: /./ },
     { mode: 'invalid', toast: /./ },
 ];
@@ -151,8 +152,9 @@ async function scenarios(page, fake) {
         await clickToggle(page);
         let toast = '';
         try {
-            await page.waitForSelector('#toast-container .toast-error', { timeout: 60000 });
-            toast = (await page.locator('#toast-container .toast-error').last().textContent())?.trim() ?? '';
+            const own = page.locator('#toast-container .toast-error', { hasText: 'Leitmotif' });
+            await own.first().waitFor({ timeout: 60000 });
+            toast = (await own.first().textContent())?.trim() ?? '';
             await waitForLabel(page, 'Generate Theme', 10000);
         } catch (error) {
             toast ||= `(no error toast: ${error.message.split('\n')[0]})`;
