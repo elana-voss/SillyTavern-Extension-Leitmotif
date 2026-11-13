@@ -31,7 +31,7 @@ Left as it is: the 300 MB of samples inside the repo (a deliberate choice for an
 | # | Milestone | Requirement | Status | Priority | Claude tokens | Provider tokens | Actual |
 |---|---|---|---|---|---|---|---|
 | 1 | Defects 1-7 and a test bed | R1 | Done | Must | 3M | 0 | 5.6M (two agents, a hand-over at the context limit; most of it cache reads at 40-60k context per turn), 0; code review none (not due) |
-| 2 | Structure: modules, shared helpers, tests | R1 | Done | Must | 4M | 0 | not yet measured, 0; code review by Fable 5.1 medium: 1 finding, fixed |
+| 2 | Structure: modules, shared helpers, tests | R1 | Done | Must | 4M | 0 | 4.5M (two agents, a hand-over at the context limit, and the review), 0; code review Fable 5.2 medium |
 | 3 | One live run and close | R1 | In progress | Must | 1M | about 15k on the owner's SillyTavern backend | |
 | | Total | | | | 8M | about 15k | |
 
