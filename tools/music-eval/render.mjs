@@ -3,7 +3,7 @@
 // recurrence, the loop seam). Usage: node render.mjs <run dir> -> <run dir>/views/*.txt
 import fs from 'node:fs';
 import path from 'node:path';
-import { METERS } from '../../src/score.mjs';
+import { DRUMS_ROLE, METERS } from '../../src/score.mjs';
 
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const FLAT = { Db: 'C#', Eb: 'D#', Gb: 'F#', Ab: 'G#', Bb: 'A#', Cb: 'B', Fb: 'E', 'E#': 'F', 'B#': 'C' };
@@ -46,11 +46,17 @@ function render(record) {
     }
     out.push('', 'FACTS');
     const weights = new Array(12).fill(0);
-    for (const track of score.tracks) {
+    // Drum names have no pitch: the drums track is left out of key, range and clashes.
+    const pitched = score.tracks.filter(track => track.role !== DRUMS_ROLE);
+    for (const track of pitched) {
         for (const event of track.events) for (const note of event.notes) weights[midi(note) % 12] += event.duration;
     }
     out.push(`key fit: ${bestScale(weights)}`);
     for (const track of score.tracks) {
+        if (track.role === DRUMS_ROLE) {
+            out.push(`drums: ${track.events.length} events, ${[...new Set(track.events.flatMap(e => e.notes))].join(' ')}`);
+            continue;
+        }
         const pitches = track.events.flatMap(event => event.notes.map(midi));
         const sounding = new Array(score.loopBeats * 4).fill(false);
         for (const event of track.events) {
@@ -90,7 +96,7 @@ function render(record) {
     let clashes = 0;
     for (let s = 0; s < score.loopBeats * 4; s += 1) {
         const beat = s / 4;
-        const ringing = score.tracks.flatMap(t => t.events.filter(e => e.beat <= beat && beat < e.beat + e.duration).flatMap(e => e.notes.map(n => ({ role: t.role, p: midi(n) }))));
+        const ringing = pitched.flatMap(t => t.events.filter(e => e.beat <= beat && beat < e.beat + e.duration).flatMap(e => e.notes.map(n => ({ role: t.role, p: midi(n) }))));
         for (let a = 0; a < ringing.length; a += 1) {
             for (let b = a + 1; b < ringing.length; b += 1) {
                 if (ringing[a].role !== ringing[b].role && [1, 11].includes(Math.abs(ringing[a].p - ringing[b].p) % 12)) clashes += 1;
