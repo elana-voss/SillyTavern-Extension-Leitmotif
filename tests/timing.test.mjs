@@ -14,6 +14,18 @@ test('swing lengthens an on-beat eighth to 2/3 and starts the off-beat eighth 1/
     close(second.beat + second.duration, 3);
 });
 
+test('swing leaves a sixteenth hat line straight (no two onsets closer than 1/4 beat) while the eighth pair still swings', () => {
+    const onsets = [];
+    for (let beat = 0; beat < 2; beat += 0.25) {
+        onsets.push(swingEvent(beat, 0.25, 'swing').beat);
+    }
+    onsets.sort((a, b) => a - b);
+    for (let index = 1; index < onsets.length; index += 1) {
+        assert.ok(onsets[index] - onsets[index - 1] >= 0.25 - 1e-9, `onsets ${onsets[index - 1]} and ${onsets[index]}`);
+    }
+    close(swingEvent(0.5, 0.5, 'swing').beat, 2 / 3);
+});
+
 test('swing leaves a held note, a sixteenth and every straight event unchanged', () => {
     assert.deepEqual(swingEvent(0, 2, 'swing'), { beat: 0, duration: 2 });
     assert.deepEqual(swingEvent(1.25, 0.25, 'swing'), { beat: 1.25, duration: 0.25 });

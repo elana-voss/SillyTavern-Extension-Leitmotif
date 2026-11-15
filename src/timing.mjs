@@ -7,8 +7,9 @@ const HUMANIZE_SECONDS = 0.008;
 const HUMANIZE_VELOCITY = 6;
 
 // The start and length in beats of an event under the score's feel. Swing
-// lengthens an on-beat eighth to 2/3 of a beat and starts every off-beat event
-// 1/6 of a beat late with its end unchanged, so the pair meets exactly.
+// lengthens an on-beat eighth to 2/3 of a beat and starts an off-beat event of
+// an eighth or longer 1/6 of a beat late with its end unchanged, so the pair
+// meets exactly; a sixteenth line stays straight, else its hits would flam.
 export function swingEvent(beat, duration, feel) {
     if (feel !== 'swing') {
         return { beat, duration };
@@ -17,7 +18,7 @@ export function swingEvent(beat, duration, feel) {
     if (position === 0 && duration === 0.5) {
         return { beat, duration: 0.5 + SWING_SHIFT };
     }
-    if (position === 0.5) {
+    if (position === 0.5 && duration >= 0.5) {
         return { beat: beat + SWING_SHIFT, duration: duration - SWING_SHIFT };
     }
     return { beat, duration };
