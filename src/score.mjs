@@ -283,12 +283,9 @@ function normalizeNumber(value) {
     return Number.isFinite(number) ? number : null;
 }
 
+// Only the bass plays below C3; every other role sits in octaves 3-6.
 function normalizeNoteOctave(note, role) {
-    const [minimum, maximum] = role === 'bass'
-        ? [1, 2]
-        : role === 'harmony' || role === 'texture'
-            ? [2, 6]
-            : [3, 6];
+    const [minimum, maximum] = role === 'bass' ? [1, 2] : [3, 6];
     return clampNoteOctave(note, minimum, maximum);
 }
 

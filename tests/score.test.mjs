@@ -67,11 +67,13 @@ test('normalizes a single note to a one-note chord', () => {
     assert.deepEqual(parsed.tracks[2].events[0].notes, ['E5']);
 });
 
-test('accepts lower chord tones used by the generated harmony', () => {
+test('only the bass plays below C3: a harmony or texture note in octave 2 moves up an octave', () => {
     const response = structuredClone(validScore);
     response.tracks[0].events[2].notes = ['Bb2', 'D3', 'F3', 'A3', 'C4'];
+    response.tracks.push({ role: 'texture', instrument: 'pad_1_new_age', events: [{ ...validScore.tracks[0].events[0], notes: ['E2'] }] });
     const parsed = parseScore(response);
-    assert.deepEqual(parsed.tracks[0].events[2].notes, ['Bb2', 'D3', 'F3', 'A3', 'C4']);
+    assert.deepEqual(parsed.tracks[0].events[2].notes, ['Bb3', 'D3', 'F3', 'A3', 'C4']);
+    assert.deepEqual(parsed.tracks[3].events[0].notes, ['E3']);
 });
 
 test('transposes notes into the octave range for their track role', () => {
@@ -433,9 +435,11 @@ test('uses the target tempo even when the model named a tempo outside 50-130', (
 
 test('moves notes in octave 0 or 7 and above into the role range instead of dropping them', () => {
     const response = structuredClone(validScore);
+    response.tracks[0].events[0].notes = 'E0';
     response.tracks[1].events[0].notes = 'E0';
     response.tracks[2].events[0].notes = ['C7', 'D8'];
     const parsed = parseScore(response);
+    assert.deepEqual(parsed.tracks[0].events[0].notes, ['E3']);
     assert.deepEqual(parsed.tracks[1].events[0].notes, ['E1']);
     assert.deepEqual(parsed.tracks[2].events[0].notes, ['C6', 'D6']);
 });
