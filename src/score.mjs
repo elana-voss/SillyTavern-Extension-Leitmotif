@@ -329,7 +329,34 @@ export function parseScore(response, {
         salvaged = true;
         console.warn('[Leitmotif] The score reply was cut off; kept the bars and events it finished.');
     }
+    const options = { loopBeats, meter, beatsPerBar, targetTempo, feel };
+    if (!salvaged) {
+        return readScore(value, options);
+    }
 
+    // A cut reply is kept only when it still sounds to the loop's end. The
+    // track being written may hold no usable event yet: then it is left out.
+    // Any failure is reported as the cut, the reason the retry needs.
+    for (const tracks of [value.tracks, value.tracks.slice(0, -1)]) {
+        let score;
+        try {
+            score = readScore({ ...value, tracks }, options);
+        } catch {
+            // This set of tracks is not a score; the next try leaves out the cut track.
+            continue;
+        }
+        const byRole = role => score.tracks.find(track => track.role === role);
+        if (reachesLastBar(byRole('melody'), loopBeats, beatsPerBar)
+            && CORE_ROLES.some(role => reachesLastBar(byRole(role), loopBeats, beatsPerBar))) {
+            return score;
+        }
+    }
+    throw new Error('The score reply was cut off before the melody and the bass or harmony reached the last bar.');
+}
+
+// A read score object (either form) to the parsed score; throws on what no
+// repair can fix.
+function readScore(value, { loopBeats, meter, beatsPerBar, targetTempo, feel }) {
     // The model's own tempo matters only when no target tempo replaces it.
     if (targetTempo === undefined
         && (!Number.isFinite(value.tempo) || value.tempo < MIN_TEMPO || value.tempo > MAX_TEMPO)) {
@@ -468,13 +495,6 @@ export function parseScore(response, {
     if (REQUIRED_ROLES.some(role => !seenRoles.has(role))
         || !CORE_ROLES.some(role => seenRoles.has(role))) {
         throw new Error('The score must contain a melody track plus at least one of harmony or bass tracks.');
-    }
-
-    // A cut reply is kept only when it still sounds to the loop's end.
-    const byRole = role => tracks.find(track => track.role === role);
-    if (salvaged && !(reachesLastBar(byRole('melody'), loopBeats, beatsPerBar)
-        && CORE_ROLES.some(role => reachesLastBar(byRole(role), loopBeats, beatsPerBar)))) {
-        throw new Error('The score reply was cut off before the melody and the bass or harmony reached the last bar.');
     }
 
     return {

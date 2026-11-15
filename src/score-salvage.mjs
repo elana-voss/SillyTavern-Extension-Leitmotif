@@ -15,8 +15,7 @@ const CLOSER = { '{': '}', '[': ']' };
 // or event is left out.
 export function closeCutScore(response) {
     const text = normalizeResponseText(response);
-    const tracksAt = text?.indexOf('"tracks"') ?? -1;
-    const start = tracksAt < 0 ? -1 : text.lastIndexOf('{', tracksAt);
+    const start = text?.indexOf('{') ?? -1;
     if (start < 0) {
         return null;
     }
@@ -27,8 +26,11 @@ export function closeCutScore(response) {
     let lastKey = null;
     let cut = null;
     const markCut = (index) => {
+        // Only the root object's tracks and the bars or events of its tracks.
         const top = stack.at(-1);
-        if (top?.char === '[' && CUT_AFTER.has(top.key)) {
+        const tracks = stack[1];
+        if (top?.char === '[' && CUT_AFTER.has(top.key)
+            && tracks?.char === '[' && tracks.key === 'tracks' && stack.length <= 4) {
             cut = { end: index + 1, closers: stack.map(open => CLOSER[open.char]).reverse().join('') };
         }
     };

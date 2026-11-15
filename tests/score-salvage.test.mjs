@@ -64,3 +64,28 @@ test('a cut reply whose melody stops in bar 3 of 8 is refused', () => {
     ] };
     assert.throws(() => quietly(() => parseScore(cutAt(score, '+C4:2"]'), options)), /cut off/);
 });
+
+test('a cut track with no usable event yet is left out, the rest kept', () => {
+    const score = { tempo: 90, meter: '4/4', tracks: [
+        { role: 'melody', instrument: 'flute', bars: eightBars('E5') },
+        { role: 'bass', instrument: 'acoustic_bass', bars: eightBars('A1') },
+        { role: 'counter', instrument: 'clarinet', bars: ['', '2:G4:2'] },
+    ] };
+    const parsed = quietly(() => parseScore(cutAt(score, '2:G4'), options));
+    assert.deepEqual(parsed.tracks.map(track => track.role), ['melody', 'bass']);
+});
+
+test('a salvaged reply that is no score reports the cut, not the later check', () => {
+    const cut = '{"tempo":90,"meter":"4/4","tracks":[{"role":"melody","instrument":"flute","bars":["0:E5:4","0:E';
+    assert.throws(() => quietly(() => parseScore(cut, options)), /cut off/);
+});
+
+test('salvage finds the score after prose naming "tracks" and past a nested object', () => {
+    const score = { tempo: 90, meter: '4/4', meta: { note: 'x' }, tracks: [
+        { role: 'melody', instrument: 'flute', bars: eightBars('E5') },
+        { role: 'bass', instrument: 'acoustic_bass', bars: eightBars('A1') },
+        { role: 'harmony', instrument: 'electric_piano_1', bars: ['0:A3+C4:2', '0:G3+B3:2 2:G3+D4:2'] },
+    ] };
+    const parsed = quietly(() => parseScore(`I will write the "tracks" now. ${cutAt(score, '+D4:2')}`, options));
+    assert.deepEqual(parsed.tracks[2].events.map(event => event.beat), [0]);
+});
