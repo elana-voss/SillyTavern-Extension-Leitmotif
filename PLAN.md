@@ -145,7 +145,7 @@ From Fable 5.2 high's blind judgement in 5d (the full report in the scratchpad, 
 6b. Live check and music. Estimate 2.5M Claude, subscription about 0.2M output (5d measured 149k for 8 themes).
 - The same 8 themes (four characters, Sonnet 5.5 and Opus 5.5) through `generate.mjs --cli`; each reply's length and stop reason read from the records: one cut or within a tenth of the limit raises the per-bar term and reruns that theme only; views by `render.mjs`; Fable 5.2 high blind-judges them against the 8 of 0.2.2 (`music-eval/v022`), as in 5d; the `.mid` and `.wav` of each to the owner's Music folder, `Leitmotif 0.2.3 themes`.
 - The test bed on the fake; `npm test`. Commit locally only.
-- Version 0.2.3 (manifest and package) last, only after every check above has passed. Nothing is pushed and the installed copy is not updated until the owner's go.
+- Version 0.2.3 (manifest and package) only after the owner's go (the owner, 2026-11-15: "the version number changes AFTER my go"); nothing is pushed and the installed copy is not updated before it.
 
 ## Questions for the owner
 
