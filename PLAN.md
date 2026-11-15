@@ -35,7 +35,7 @@ Left as it is: the 300 MB of samples inside the repo (a deliberate choice for an
 | 2 | Structure: modules, shared helpers, tests | R1 | Done | Must | 4M | 0 | 4.5M (two agents, a hand-over at the context limit, and the review), 0; code review Fable 5.2 medium |
 | 3 | One live run and close | R1 | Done | Must | 1M | about 15k on the owner's SillyTavern backend | Claude 1.6M, provider 18,741 tokens (two generations, as the backend reported them); code review none (not due) |
 | 4 | Music quality: Fable reviews the prompts and blind-judges Opus and Sonnet themes, before and after the prompt changes | R2 | Done | Must | 3M | under 8 USD on the API key | Claude about 3M (estimate; not measured), Fable judging 0.25M; API 7.74 USD over 60 calls (prices from Anthropic's list, counted by the script); code review none (not due) |
-| 5 | Every Fable suggestion built | R2 | In progress | Must | 12M | subscription, about 0.6M output | 5a 4.1M against 4M (two agents, a hand-over at the context limit; code review Fable 5.2 medium) |
+| 5 | Every Fable suggestion built | R2 | In progress | Must | 12M | subscription, about 0.6M output | 5a 4.1M against 4M (two agents, a hand-over at the context limit; code review Fable 5.2 medium); 5b 2.4M against 4M (code review Fable 5.2 medium) |
 | | Total | | | | 23M | about 15k; under 8 USD | 14.9M Claude; 18,741 provider (the backend reported 0 USD); 7.74 USD API |
 
 Each milestone ends with the tests passing and the extension working in a local SillyTavern on the test bed.
