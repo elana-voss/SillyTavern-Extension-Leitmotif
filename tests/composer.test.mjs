@@ -45,3 +45,45 @@ test('the score reply has room to think and to write every bar, also on the retr
     assert.doesNotMatch(retry, /3-6 events/);
     assert.match(retry, /as active as the brief demands/);
 });
+
+test('the composer prompt holds each rule and none of the lines they replace', () => {
+    const prompt = getComposerPrompt(character, options);
+    const rules = [
+        /accompaniment notes last at most 2 beats, pads at most 2 bars/i,
+        /plucked or struck instruments re-strike at least every 2 beats/,
+        /no drums track: one part acts as percussion \(off-beat strums or marimba\)/,
+        /no melody note over 2 beats except at cadences/i,
+        /Every bar has new onsets in at least two parts; a break lasts at most 2 bars with one part still pulsing/,
+        /mode's colour tone sits in the melody and resolves/,
+        /Dense themes use more than a two-chord vamp/,
+        /any density above sparse has a harmony track/i,
+        /counter sounds at least 40 % of the loop, plays in the peak section, answers every melody gap of 2 beats or more, uses at least two durations and quotes the motif once/,
+        /No track except drums repeats a bar's rhythm more than twice running/,
+        /bass approaches each chord by step and plays a fill before each section change/,
+        /last bar ends off the tonic/,
+        /Sustaining instruments hold, decaying ones move/,
+        /Texture has at most 2 notes, an octave away from the harmony voicing/,
+        /melody stays above the harmony's top note/,
+        /No held note a semitone from a chord tone in the same octave/,
+        /<surprise> happens once: a borrowed chord, a register drop, a tacet part or a rhythmic shift/,
+        /<phrase_plan>/,
+        /<groove_cells>.*varied/,
+    ];
+    for (const rule of rules) {
+        assert.match(prompt, rule);
+    }
+    for (const replaced of [/There are no drums/, /repeating rhythmic figure/, /1\.5 beats/, /chord outside the usual cycle/,
+        /Avoid holding semitone clashes/, /change the bass or accompaniment figure every fourth bar/, /no bar repeats unchanged/]) {
+        assert.doesNotMatch(prompt, replaced);
+    }
+    assert.doesNotMatch(prompt, /drum_kit/);
+});
+
+test('the composer adds a drums track only when the brief has drums', () => {
+    const brief = parseBrief({ timbre: { drums: 'drum_kit' }, groove_cells: { bass: [0], harmony: [0.5], drums: [0, 1] } });
+    const prompt = getComposerPrompt(character, { ...options, brief });
+    assert.match(prompt, /"role":"drums","instrument":"drum_kit"/);
+    assert.match(prompt, /Drums: play the drum cell from <groove_cells>, varied, with a fill before each phrase/);
+    assert.match(prompt, /kick, snare/);
+    assert.doesNotMatch(prompt, /no drums track/);
+});

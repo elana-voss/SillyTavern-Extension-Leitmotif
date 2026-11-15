@@ -23,9 +23,11 @@ const BRIEF = {
     energy_curve: ['low', 'rise', 'full', 'fall'],
     density: 'balanced',
     motif: { notes: ['D4', 'F4', 'A4'], rhythm: [1, 0.5, 1.5], character: 'a rising call' },
-    timbre: { harmony: 'warm pad', bass: 'soft bass', melody: 'flute', counter: null, texture: null },
+    timbre: { harmony: 'pad_2_warm', bass: 'acoustic_bass', melody: 'flute', counter: null, texture: null, drums: 'drum_kit' },
     harmony_flavor: 'modal, open fifths',
-    surprise: 'a major chord in bar 3',
+    surprise: 'a borrowed major chord before the last phrase',
+    groove_cells: { bass: [0, 2.5], harmony: [0.5, 1.5, 2.5, 3.5], drums: [0, 1, 2, 3] },
+    phrase_plan: ['statement', 'answer', 'climax', 'cadence'],
 };
 
 const SCORE = {

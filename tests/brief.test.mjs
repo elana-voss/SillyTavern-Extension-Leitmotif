@@ -11,6 +11,7 @@ import {
     varietySeedToBriefAddition,
     createBriefCache,
 } from '../src/brief.mjs';
+import { TRACK_ROLES } from '../src/score.mjs';
 
 const fullBrief = {
     backdrop: 'A frozen harbor town under aurora light',
@@ -28,7 +29,9 @@ const fullBrief = {
     energy_curve: ['low', 'medium', 'high', 'medium'],
     density: 'balanced',
     motif: { notes: ['A3', 'C4', 'D3'], rhythm: [0.5, 0.5, 1], character: 'rising, questioning' },
-    timbre: { harmony: 'cold shimmer', bass: 'wooden and close', melody: 'breathy' },
+    timbre: { harmony: 'vibraphone', bass: 'contrabass', melody: 'clarinet', counter: null, texture: null, drums: null },
+    groove_cells: { bass: [0, 1.5, 2], harmony: [0.5, 1.5, 2.5], drums: null },
+    phrase_plan: ['statement', 'answer', 'climax', 'cadence'],
     harmony_flavor: 'minor ninths with suspensions',
     surprise: 'bar 3 drops to the flat-II for one beat',
 };
@@ -41,7 +44,7 @@ test('parses a full brief from fenced JSON', () => {
     assert.equal(brief.feel, 'swing');
     assert.deepEqual(brief.motif.notes, ['A3', 'C4', 'D3']);
     assert.deepEqual(brief.genreReferences, ['Nordic noir jazz', 'sparse ambient']);
-    assert.equal(brief.timbre.harmony, 'cold shimmer');
+    assert.equal(brief.timbre.harmony, 'vibraphone');
 });
 
 test('degrades fail-soft instead of throwing', () => {
@@ -202,4 +205,58 @@ test('the brief cache tells a brief made with a tempo hint from one made without
     assert.equal(cache.has(character, null), false);
     assert.equal(cache.has(character, 90), false);
     assert.equal(cache.has(character, 72), true);
+});
+
+test('a timbre outside its role list is dropped; drums take only drum_kit', () => {
+    const brief = parseBrief({
+        ...fullBrief,
+        timbre: { harmony: 'electric_piano_1', bass: 'cold shimmer', melody: 'contrabass', counter: null, texture: null, drums: 'drum_kit' },
+    });
+    assert.deepEqual(brief.timbre, { harmony: 'electric_piano_1', drums: 'drum_kit' });
+    assert.equal(parseBrief({ ...fullBrief, timbre: { drums: 'bongos' } }).timbre.drums, undefined);
+});
+
+test('a 30-word surprise is cut at a word, not mid-word', () => {
+    const words = Array.from({ length: 30 }, (_, index) => `borrowed${index}`);
+    const surprise = parseBrief({ ...fullBrief, surprise: words.join(' ') }).surprise;
+    assert.ok(surprise.length > 0 && surprise.length <= 120);
+    assert.ok(words.join(' ').startsWith(surprise));
+    assert.equal(words.join(' ')[surprise.length], ' ');
+});
+
+test('the brief schema has the timbre enums, groove cells and phrase plan', () => {
+    const { timbre, groove_cells: grooveCells, phrase_plan: phrasePlan, surprise } = BRIEF_JSON_SCHEMA.properties;
+    assert.deepEqual(timbre.properties.bass.enum, [...TRACK_ROLES.bass, null]);
+    assert.deepEqual(timbre.properties.drums.enum, ['drum_kit', null]);
+    assert.ok(BRIEF_JSON_SCHEMA.required.includes('groove_cells') && BRIEF_JSON_SCHEMA.required.includes('phrase_plan'));
+    assert.deepEqual(grooveCells.required, ['bass', 'harmony', 'drums']);
+    assert.deepEqual(phrasePlan.items.enum, ['statement', 'answer', 'sequence', 'fragment', 'climax', 'cadence']);
+    assert.match(surprise.description, /At most 15 words/);
+    assert.match(surprise.description, /borrowed chord.*register drop.*tacet part.*rhythmic shift/);
+});
+
+test('groove cells and the phrase plan are parsed and reach the composer section', () => {
+    const brief = parseBrief({
+        ...fullBrief,
+        meter: '4/4',
+        groove_cells: { bass: [2, 0, 0, 4, -1, 1.3], harmony: [0.5, 'x'], drums: [0, 1] },
+        phrase_plan: ['statement', 'bar 3', 'sequence', 'cadence'],
+    });
+    assert.deepEqual(brief.grooveCells, { bass: [0, 1.25, 2], harmony: [0.5] });
+    assert.deepEqual(brief.phrasePlan, ['statement', 'sequence', 'cadence']);
+    const withDrums = parseBrief({ ...fullBrief, timbre: { drums: 'drum_kit' }, groove_cells: { bass: [0], harmony: [0], drums: [0, 1, 2] } });
+    assert.deepEqual(withDrums.grooveCells.drums, [0, 1, 2]);
+    const section = musicBriefToPromptSection(withDrums);
+    assert.match(section, /<groove_cells>bass 0; harmony 0; drums 0 1 2<\/groove_cells>/);
+    assert.match(section, /<phrase_plan>statement -&gt; answer -&gt; climax -&gt; cadence<\/phrase_plan>/);
+    assert.match(section, /<timbre>drums: drum_kit<\/timbre>/);
+});
+
+test('the brief prompt allows drums and its example carries the new fields', () => {
+    const prompt = getBriefPrompt({ name: 'Solo', profileFields: 'x' }, {});
+    assert.doesNotMatch(prompt, /no drums/);
+    assert.match(prompt, /"drums":"drum_kit\|null"/);
+    assert.match(prompt, /"groove_cells":\{"bass":\[/);
+    assert.match(prompt, /"phrase_plan":\[/);
+    assert.match(prompt, /"bass":"acoustic_bass\|/);
 });
