@@ -137,7 +137,26 @@ export const INSTRUMENTS = Object.freeze({
 export const REQUIRED_ROLES = Object.freeze(['melody']);
 // Core parts: the score needs melody plus at least one of these, not necessarily both.
 export const CORE_ROLES = Object.freeze(['harmony', 'bass']);
-export const OPTIONAL_ROLES = Object.freeze(['counter', 'texture']);
+export const OPTIONAL_ROLES = Object.freeze(['counter', 'texture', 'drums']);
+const ROLES = Object.freeze([...REQUIRED_ROLES, ...CORE_ROLES, ...OPTIONAL_ROLES]);
+
+// The drums track plays the fixed kit below on its own instrument, which is no
+// General MIDI program (GM drums live on channel 10): it stays out of
+// INSTRUMENTS and is never swapped for a pitched one. Name to GM drum note.
+export const DRUMS_ROLE = 'drums';
+export const DRUM_INSTRUMENT = 'drum_kit';
+export const DRUM_NOTES = Object.freeze({
+    kick: 36,
+    snare: 38,
+    rim: 37,
+    clap: 39,
+    closed_hat: 42,
+    open_hat: 46,
+    low_tom: 45,
+    high_tom: 50,
+    crash: 49,
+    ride: 51,
+});
 
 // Role guidance for the composer, not a restriction: any known instrument is
 // valid on any role (the role only fixes the octave range).
@@ -195,11 +214,11 @@ export const SCORE_JSON_SCHEMA = Object.freeze({
                 properties: {
                     role: {
                         type: 'string',
-                        enum: ['harmony', 'bass', 'melody', 'counter', 'texture'],
+                        enum: ROLES,
                     },
                     instrument: {
                         type: 'string',
-                        enum: Object.keys(INSTRUMENTS),
+                        enum: [...Object.keys(INSTRUMENTS), DRUM_INSTRUMENT],
                     },
                     events: {
                         type: 'array',
@@ -223,7 +242,7 @@ export const SCORE_JSON_SCHEMA = Object.freeze({
                                 notes: {
                                     type: 'array',
                                     items: { type: 'string' },
-                                    description: 'One to five simultaneous note names like C4, F#3, or Bb4.',
+                                    description: 'One to five simultaneous note names like C4, F#3, or Bb4; on the drums track drum names.',
                                 },
                             },
                         },
@@ -335,10 +354,21 @@ function normalizeNoteOctave(note, role) {
     return clampNoteOctave(note, minimum, maximum);
 }
 
+// The drum names of one event that belong to the kit; the rest dropped with a warning.
+function readDrumNotes(names, trackIndex, eventIndex) {
+    const normalized = names.map(name => name.trim().toLowerCase());
+    const unknown = normalized.filter(name => !Object.hasOwn(DRUM_NOTES, name));
+    if (unknown.length > 0) {
+        console.warn(`[Leitmotif] Track ${trackIndex + 1}, event ${eventIndex + 1} named unknown drums (${unknown.join(', ')}); dropped them.`);
+    }
+    return normalized.filter(name => Object.hasOwn(DRUM_NOTES, name));
+}
+
 export function parseScore(response, {
     loopBeats = 16,
     meter = '4/4',
     targetTempo,
+    feel,
 } = {}) {
     const beatsPerBar = getBeatsPerBar(meter);
 
@@ -371,13 +401,13 @@ export function parseScore(response, {
         throw new Error(`Target tempo must be a whole number from ${MIN_TEMPO} to ${MAX_TEMPO} BPM.`);
     }
 
-    // 2 to 5 tracks: melody plus at least one core part (harmony or bass), optionally with counter and texture.
+    // 2 to 6 tracks: melody plus at least one core part (harmony or bass), optionally with counter, texture and drums.
     const minTracks = REQUIRED_ROLES.length + 1;
     const maxTracks = REQUIRED_ROLES.length + CORE_ROLES.length + OPTIONAL_ROLES.length;
     if (!Array.isArray(value.tracks)
         || value.tracks.length < minTracks
         || value.tracks.length > maxTracks) {
-        throw new Error(`The score must contain ${minTracks} to ${maxTracks} tracks: a melody track plus at least one of harmony or bass, optionally with counter and texture tracks.`);
+        throw new Error(`The score must contain ${minTracks} to ${maxTracks} tracks: a melody track plus at least one of harmony or bass, optionally with counter, texture and drums tracks.`);
     }
 
     const seenRoles = new Set();
@@ -386,7 +416,7 @@ export function parseScore(response, {
             throw new Error(`Track ${index + 1} must be an object.`);
         }
 
-        if (!Object.hasOwn(TRACK_ROLES, track.role)) {
+        if (!ROLES.includes(track.role)) {
             throw new Error(`Track ${index + 1} uses an unsupported role.`);
         }
         if (seenRoles.has(track.role)) {
@@ -398,16 +428,24 @@ export function parseScore(response, {
         // is valid on any role (the role only fixes the octave range). A
         // hallucinated instrument falls back to the role's first palette
         // entry so a naming slip can never fail the generation.
+        const drums = track.role === DRUMS_ROLE;
         let instrument = track.instrument;
-        if (!Object.hasOwn(INSTRUMENTS, instrument)) {
+        if (drums) {
+            if (instrument !== DRUM_INSTRUMENT) {
+                console.warn(`[Leitmotif] Track ${index + 1} put ${instrument} on drums; using ${DRUM_INSTRUMENT} instead.`);
+            }
+            instrument = DRUM_INSTRUMENT;
+        } else if (!Object.hasOwn(INSTRUMENTS, instrument)) {
             instrument = TRACK_ROLES[track.role][0];
             console.warn(`[Leitmotif] Track ${index + 1} named an unknown instrument; using ${instrument} instead.`);
         }
 
+        // Drums may fill every sixteenth (a hat line); pitched parts at most three per beat.
+        const maxEvents = loopBeats * (drums ? 4 : 3);
         if (!Array.isArray(track.events)
             || track.events.length < 1
-            || track.events.length > loopBeats * 3) {
-            throw new Error(`Track ${index + 1} must contain 1 to ${loopBeats * 3} timed events.`);
+            || track.events.length > maxEvents) {
+            throw new Error(`Track ${index + 1} must contain 1 to ${maxEvents} timed events.`);
         }
 
         // Events are normalized fail-soft: model slips are repaired or dropped
@@ -434,10 +472,13 @@ export function parseScore(response, {
                 const velocity = Math.min(127, Math.max(1, Math.round(normalizeNumber(event.velocity) ?? 100)));
 
                 const rawNotes = typeof event.notes === 'string' ? [event.notes] : event.notes;
-                const usableNotes = (Array.isArray(rawNotes) ? rawNotes : [])
-                    .filter(note => typeof note === 'string')
-                    .map(note => note.trim().replace(/^([a-g])/, letter => letter.toUpperCase()))
-                    .filter(note => ANY_OCTAVE_NOTE.test(note));
+                const namedNotes = (Array.isArray(rawNotes) ? rawNotes : [])
+                    .filter(note => typeof note === 'string');
+                const usableNotes = drums
+                    ? readDrumNotes(namedNotes, index, eventIndex)
+                    : namedNotes
+                        .map(note => note.trim().replace(/^([a-g])/, letter => letter.toUpperCase()))
+                        .filter(note => ANY_OCTAVE_NOTE.test(note));
                 if (usableNotes.length === 0) {
                     console.warn(`[Leitmotif] Track ${index + 1}, event ${eventIndex + 1} has no usable notes; dropped the event.`);
                     return null;
@@ -446,7 +487,8 @@ export function parseScore(response, {
                     console.warn(`[Leitmotif] Track ${index + 1}, event ${eventIndex + 1} named ${usableNotes.length} notes; kept the first ${MAX_NOTES_PER_EVENT}.`);
                 }
                 const pitches = usableNotes.slice(0, MAX_NOTES_PER_EVENT);
-                const transposedPitches = pitches.map(note => normalizeNoteOctave(note, track.role));
+                // Drum names have no octave to move.
+                const transposedPitches = drums ? pitches : pitches.map(note => normalizeNoteOctave(note, track.role));
                 const normalizedPitches = [...new Set(transposedPitches)];
                 if (transposedPitches.some((note, noteIndex) => note !== pitches[noteIndex])) {
                     adjustedEvents.push({
@@ -486,6 +528,7 @@ export function parseScore(response, {
 
     return {
         tempo: targetTempo ?? value.tempo,
+        feel: feel === 'swing' ? 'swing' : 'straight',
         loopBeats,
         meter,
         tracks,

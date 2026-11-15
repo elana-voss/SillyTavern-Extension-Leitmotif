@@ -322,6 +322,7 @@ async function handleGenerateClick() {
             loopBeats,
             meter,
             targetTempo: tempo,
+            feel: brief?.feel,
         };
         let score;
         let failureReason = '';

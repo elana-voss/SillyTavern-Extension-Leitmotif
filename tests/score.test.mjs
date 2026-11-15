@@ -47,6 +47,7 @@ const validScore = {
 test('parses timed chords, rests, durations, and dynamics from a fenced JSON score', () => {
     const expected = {
         ...validScore,
+        feel: 'straight',
         loopBeats: 16,
         meter: '4/4',
         tracks: validScore.tracks.map(track => ({
@@ -233,7 +234,7 @@ test('accepts slim duo arrangements of melody plus one core part', () => {
     assert.deepEqual(duoHarmony.tracks.map(track => track.role), ['harmony', 'melody']);
     const duoBass = parseScore({ ...validScore, tracks: [validScore.tracks[1], validScore.tracks[2]] });
     assert.deepEqual(duoBass.tracks.map(track => track.role), ['bass', 'melody']);
-    assert.throws(() => parseScore({ ...validScore, tracks: [validScore.tracks[2]] }), /2 to 5/);
+    assert.throws(() => parseScore({ ...validScore, tracks: [validScore.tracks[2]] }), /2 to 6/);
 });
 
 test('accepts optional counter and texture tracks in 3/4 meter', () => {
