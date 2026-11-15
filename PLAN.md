@@ -131,10 +131,19 @@ From Fable 5.2 high's blind judgement in 5d (the full report in the scratchpad, 
 - (6) "Only the bass plays below C3; chord voicings sit between C3 and C5; the texture takes a register no other track uses and never the harmony's notes in the same octave." Replaces the octave ranges for harmony and texture (`:86`) and the texture's "an octave away from the harmony voicing" (`:98`).
 - (7) "Place the surprise in the second half of the loop, after the motif has been heard at least twice; it must contain a note outside the mode and show in at least two tracks; write the chord as its actual notes, not a Roman numeral." Replaces the surprise line (`:90`) and the brief's `surprise` description (`brief.mjs:92`).
 - (8) "The last bar leads into bar 1: end on V, bVII or a tritone substitute, never on the tonic chord, with the melody within a step of its first note; the last value of the energy plan is at most one level from the first (end on a fall or a pickup, not full into low)." Replaces "the last bar ends off the tonic" (`:96`) and goes into the brief's energy_curve rule (`brief.mjs:208`).
-- Test: the composer prompt holds each rule and none of the replaced lines; the brief prompt holds (1) and (8).
+- Plan review (Fable 5.2 medium), applied:
+  - (4) and (6) reach the composer's example: the example bars (`composer.mjs:79`, drums `:71`) get per-token accents; the example's texture moves to a register no other example track uses. In (4), the rest of `:98` ("avoid random notes ... and excessive density") stays; "use no crash" goes into the drums rule (`:74`).
+  - (7) also replaces `SURPRISE_KINDS` (`brief.mjs:22`) and the brief's example shape (`:202`); "happens once" stays, "small enough that bar one still follows seamlessly" goes ((8) covers the seam); the last bar's bVII or tritone substitute from (8) is not a second surprise. The 5c decision on the four kinds is rewritten.
+  - (3) also replaces the counter's "under the climax it moves in thirds, sixths or contrary motion" (`:97`) with "under the climax, contrary motion"; "sounds at least 40 % of the loop" stays (held notes count).
+  - (5) also drops "clusters" from `:87` and makes the colour-tone line "appears in the melody, as a chord tone or for at most half a beat, and resolves"; the pads at `:92` become "at most 2 bars and never across a chord change".
+  - (2) also removes "varied, not repeated" at `:92`; (2) states the variation.
+  - (8): the brief's energy rule (`brief.mjs:208`, schema description `:61`) names the order low < medium < high < full, with rise, fall and break allowed as the last value; prompt only, the parser does not enforce it.
+  - (1): hand percussion is `drum_kit` played on rim, clap and toms; no new instrument. (1) lives in the brief prompt only; the composer's no-drums line (`:75`) stays for briefs without drums.
+  - (6) is enforced: `normalizeNoteOctave` (`score.mjs:286-292`) clamps harmony and texture to octaves 3-6; `tests/score.test.mjs:77`, `:434` follow.
+  - Test: the composer prompt holds (2)-(8) and none of the replaced lines; the brief prompt holds (1) and (8)'s energy sentence. Assertions on replaced text move to the "replaced" list: `tests/composer.test.mjs:59, 60, 62, 65, 67, 68, 86`; `tests/brief.test.mjs:234-235`.
 
 6b. Live check and music. Estimate 2.5M Claude, subscription about 0.2M output (5d measured 149k for 8 themes).
-- The same 8 themes (four characters, Sonnet 5.5 and Opus 5.5) through `generate.mjs --cli`; Fable 5.2 high blind-judges them against the 8 of 0.2.2 (`music-eval/v022`), as in 5d; the `.mid` and `.wav` of each to the owner's Music folder, `Leitmotif 0.2.3 themes`.
+- The same 8 themes (four characters, Sonnet 5.5 and Opus 5.5) through `generate.mjs --cli`; each reply's length and stop reason read from the records: one cut or within a tenth of the limit raises the per-bar term and reruns that theme only; views by `render.mjs`; Fable 5.2 high blind-judges them against the 8 of 0.2.2 (`music-eval/v022`), as in 5d; the `.mid` and `.wav` of each to the owner's Music folder, `Leitmotif 0.2.3 themes`.
 - The test bed on the fake; `npm test`. Commit locally only.
 - Version 0.2.3 (manifest and package) last, only after every check above has passed. Nothing is pushed and the installed copy is not updated until the owner's go.
 
@@ -167,7 +176,7 @@ From Fable 5.2 high's blind judgement in 5d (the full report in the scratchpad, 
 - Salvage cuts only inside the root object's `tracks`; when the cut track has no usable event yet it is left out; any failure of a salvaged reply is reported as the cut, so the retry asks for melody, bass and harmony.
 - Groove cells are onset beats only (drums too, no kit names); the parser snaps them to the sixteenth grid inside the brief's bar and keeps the drums cell only when `timbre.drums` is set.
 - `phrase_plan` is an enum list (statement, answer, sequence, fragment, climax, cadence), 2-8 entries; the composer falls back to that order without one.
-- `surprise` stays free text (at most 15 words) naming one of the four kinds; no separate enum field.
+- `surprise` stays free text (at most 15 words) naming its chord as notes outside the mode and where in the second half it falls (6a, (7)); no separate enum field.
 - The composer's drums track is asked for only when the brief's `timbre.drums` is set (prompt rule and example); without a brief, no drums.
 - `generate.mjs --cli` takes the Claude CLI binary from `CLAUDE_CLI`: an older installed CLI refuses Opus 5.5, so a newer binary already on the machine was used.
 - The playback pass is exported (`createMasterChain`, `schedulePass`, `loadScorePlayers`, `createHumanizer` in `playback.mjs`) so `render-audio.mjs` renders offline with the extension's own sound.
