@@ -141,6 +141,7 @@ From Fable 5.2 high's blind judgement in 5d (the full report in the scratchpad, 
   - (1): hand percussion is `drum_kit` played on rim, clap and toms; no new instrument. (1) lives in the brief prompt only; the composer's no-drums line (`:75`) stays for briefs without drums.
   - (6) is enforced: `normalizeNoteOctave` (`score.mjs:286-292`) clamps harmony and texture to octaves 3-6; `tests/score.test.mjs:77`, `:434` follow.
   - Test: the composer prompt holds (2)-(8) and none of the replaced lines; the brief prompt holds (1) and (8)'s energy sentence. Assertions on replaced text move to the "replaced" list: `tests/composer.test.mjs:59, 60, 62, 65, 67, 68, 86`; `tests/brief.test.mjs:234-235`.
+- Done: 6a, the four review fixes, (1)-(8) and every amendment; tests: composer prompt holds (2)-(8) and none of the replaced lines, example accents and texture register, brief prompt and schema hold (1), (7) and (8)'s energy sentence, drums swing by position, harmony and texture clamp to octaves 3-6; `npm test` 95/95, the test bed on the fake 11/11.
 
 6b. Live check and music. Estimate 2.5M Claude, subscription about 0.2M output (5d measured 149k for 8 themes).
 - The same 8 themes (four characters, Sonnet 5.5 and Opus 5.5) through `generate.mjs --cli`; each reply's length and stop reason read from the records: one cut or within a tenth of the limit raises the per-bar term and reruns that theme only; views by `render.mjs`; Fable 5.2 high blind-judges them against the 8 of 0.2.2 (`music-eval/v022`), as in 5d; the `.mid` and `.wav` of each to the owner's Music folder, `Leitmotif 0.2.3 themes`.
@@ -165,7 +166,7 @@ From Fable 5.2 high's blind judgement in 5d (the full report in the scratchpad, 
 - Defect fixed after the review: the move had dropped the backslash from the characters the MIDI file name replaces; test in `tests/midi-export.test.mjs`.
 - The bed's live run: `run.mjs --live <SillyTavern user data folder>` copies that user's `settings.json` and `secrets.json` into the bed for the run only, deletes them after, runs generate, stop and download, and writes the backend's replies to `live-responses.json` in the bed; it waits up to 10 minutes for the score (a real model wrote about 5,000 tokens for it).
 - `deploy-local.ps1` always copies `lib/` and `src/`, `samples/` only when its size differs; the bed's `sync.mjs` leaves out `tests/`.
-- Swing shifts an off-beat event only when it is an eighth or longer; a sixteenth at x.5 stays straight, so a sixteenth hat line does not flam. Known: an on-beat eighth over an off-beat sixteenth overlaps it by 1/6 beat.
+- Swing shifts a pitched off-beat event only when it is an eighth or longer; a pitched sixteenth at x.5 stays straight. Drums swing by position (6a): the second half of each beat is squeezed into its last third (x.5 to x+2/3, x.75 to x+5/6), each hit keeps its length, so a sixteenth hat line keeps its order (onsets at least 1/6 beat apart). Known: an on-beat pitched eighth over an off-beat sixteenth overlaps it by 1/6 beat.
 - Humanisation draws per note from a fixed seed set at each `play()`, so a replay sounds the same.
 - Pitched tracks take MIDI channels 1-9 in order; drums take channel 10.
 - A pitched instrument on the drums role becomes `drum_kit`, with a warning.
@@ -181,6 +182,10 @@ From Fable 5.2 high's blind judgement in 5d (the full report in the scratchpad, 
 - `generate.mjs --cli` takes the Claude CLI binary from `CLAUDE_CLI`: an older installed CLI refuses Opus 5.5, so a newer binary already on the machine was used.
 - The playback pass is exported (`createMasterChain`, `schedulePass`, `loadScorePlayers`, `createHumanizer` in `playback.mjs`) so `render-audio.mjs` renders offline with the extension's own sound.
 - For the blind judgement each view's last `calls:` line is stripped: the CLI's stop reason ("success") against the API's ("end_turn") would unblind the sets.
+- 6a: only the bass plays below C3, also in the parser: harmony and texture clamp to octaves 3-6 like melody and counter; the 5c test that kept a harmony Bb2 now expects Bb3.
+- 6a: the composer's "the last returns and resolves into bar one" became "the last returns into bar one", as (8) forbids ending on the tonic.
+- 6a: the swing rule is one fixed prompt sentence ("When the feel is swing, playback swings the eighths: write them straight"), not only in swung briefs; the groove-cells fallback is a parenthesis after the tag, as `<phrase_plan>` has.
+- 6a: the composer example's texture sits in octave 6, the only octave no other example track uses; every example token carries its own velocity.
 
 ## Trials
 
