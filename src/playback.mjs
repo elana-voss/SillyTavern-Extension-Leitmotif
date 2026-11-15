@@ -1,9 +1,14 @@
 // Sampled playback: the score looped through Web Audio with the FluidR3 samples
 // shipped in samples/, held notes on sustained instruments looping their sample
-// at points found by loop-points.mjs. One playback at a time; starting a new one
-// or stopping cancels the old one, even while its samples are still loading.
+// at points found by loop-points.mjs, the drums track on the synthesized kit
+// of drum-synth.mjs. Notes are swung by the score's feel and humanised (start
+// and velocity) by timing.mjs. One playback at a time; starting a new one or
+// stopping cancels the old one, even while its samples are still loading.
+import { createDrumSynth } from './drum-synth.mjs';
 import { findLoopPoints } from './loop-points.mjs';
+import { DRUMS_ROLE } from './score.mjs';
 import { createScriptLoader } from './script-loader.mjs';
+import { createRandom, humanize, swingEvent } from './timing.mjs';
 
 // Instruments whose FluidR3 samples are sustained long tones: holding a note past
 // the sample length must keep looping the steady-state tail instead of falling
@@ -108,6 +113,15 @@ function getNoteOptions(buffer, { velocity, requestedLength, sustainedInstrument
     return options;
 }
 
+// One player per track: the synthesized kit for drums, a sample file otherwise.
+export function loadTrackPlayers(tracks, { loadSample, createDrums }) {
+    return Promise.all(tracks.map(track =>
+        track.role === DRUMS_ROLE ? createDrums() : loadSample(track.instrument)));
+}
+
+// The same humanisation every time a theme starts, varying from pass to pass.
+const HUMANIZE_SEED = 1;
+
 // soundfontUrl: the soundfont-player script; sampleUrlBase: the samples/ folder
 // URL; onStop: called after every stop, to show the idle state.
 export function createPlayback({ soundfontUrl, sampleUrlBase, logTag, onStop }) {
@@ -158,17 +172,20 @@ export function createPlayback({ soundfontUrl, sampleUrlBase, logTag, onStop }) 
         const soundfont = await loadSoundfont();
         // Samples ship with the extension in samples/; there is no network
         // fallback, so a missing file means an incomplete install.
-        return Promise.all(score.tracks.map(async track => {
-            const url = new URL(`${track.instrument}-mp3.js`, sampleUrlBase).href;
-            try {
-                return await soundfont.instrument(audioContext, url, {
-                    destination: masterCompressor,
-                });
-            } catch (error) {
-                console.error(logTag, `Could not load the sample file for ${track.instrument}`, url, error);
-                throw new Error(`The ${track.instrument} sample could not be loaded. The extension appears to be installed incompletely; reinstall it.`);
-            }
-        }));
+        return loadTrackPlayers(score.tracks, {
+            createDrums: () => createDrumSynth(audioContext, { destination: masterCompressor }),
+            loadSample: async instrument => {
+                const url = new URL(`${instrument}-mp3.js`, sampleUrlBase).href;
+                try {
+                    return await soundfont.instrument(audioContext, url, {
+                        destination: masterCompressor,
+                    });
+                } catch (error) {
+                    console.error(logTag, `Could not load the sample file for ${instrument}`, url, error);
+                    throw new Error(`The ${instrument} sample could not be loaded. The extension appears to be installed incompletely; reinstall it.`);
+                }
+            },
+        });
     }
 
     // Loads the samples, then loops the score until stop() or the next play().
@@ -191,6 +208,7 @@ export function createPlayback({ soundfontUrl, sampleUrlBase, logTag, onStop }) 
             activePlayers = players;
             const beatLength = 60 / score.tempo;
             const loopLength = score.loopBeats * beatLength;
+            const random = createRandom(HUMANIZE_SEED);
 
             const scheduleLoop = (startTime = audioContext.currentTime + 0.08) => {
                 if (current !== generation) {
@@ -200,11 +218,15 @@ export function createPlayback({ soundfontUrl, sampleUrlBase, logTag, onStop }) 
                     const player = players[trackIndex];
                     const sustainedInstrument = SUSTAINED_INSTRUMENTS.has(track.instrument);
                     for (const event of track.events) {
-                        const when = startTime + event.beat * beatLength;
-                        const requestedLength = event.duration * beatLength;
+                        const { beat, duration } = swingEvent(event.beat, event.duration, score.feel);
+                        const requestedLength = duration * beatLength;
                         for (const note of event.notes) {
+                            const { when, velocity } = humanize(
+                                { beat, when: startTime + beat * beatLength, velocity: event.velocity },
+                                { random, loopStart: startTime },
+                            );
                             const options = getNoteOptions(getNoteBuffer(player, note), {
-                                velocity: event.velocity,
+                                velocity,
                                 requestedLength,
                                 sustainedInstrument,
                             });
