@@ -1,7 +1,7 @@
 // The complete General MIDI palette: program number per instrument name. The
 // same name is the FluidR3 sample file shipped in samples/ ({name}-mp3.js), so
 // every entry here must have a matching sample in the repository.
-import { readJsonObject } from './model-response.mjs';
+import { normalizeResponseText, readJsonObject } from './model-response.mjs';
 
 export const INSTRUMENTS = Object.freeze({
     accordion: 21,
@@ -257,7 +257,55 @@ export function getLoopBars(lengthSeconds, tempo, meter = '4/4') {
     if (!Number.isInteger(tempo) || tempo < MIN_TEMPO || tempo > MAX_TEMPO) {
         throw new Error(`Tempo must be a whole number from ${MIN_TEMPO} to ${MAX_TEMPO} BPM.`);
     }
-    return Math.max(MIN_BARS, Math.round(lengthSeconds * tempo / 60 / getBeatsPerBar(meter)));
+    // Whole four-bar phrases: a loop of 10 or 13 bars leaves a ragged phrase before the seam.
+    return Math.max(4, Math.round(lengthSeconds * tempo / 60 / getBeatsPerBar(meter) / 4) * 4);
+}
+
+// A reply cut off by the length limit: keep every track that closed, drop the
+// one being written, close the JSON. Null when no track closed or the result
+// still does not parse; the caller then reports the original error.
+function closeCutScore(response) {
+    const text = normalizeResponseText(response);
+    const tracksAt = text?.indexOf('"tracks"') ?? -1;
+    if (tracksAt < 0) {
+        return null;
+    }
+    let depth = 0;
+    let inString = false;
+    let tracksDepth = -1;
+    let lastTrackEnd = -1;
+    for (let index = tracksAt; index < text.length; index += 1) {
+        const char = text[index];
+        if (inString) {
+            if (char === '\\') {
+                index += 1;
+            } else if (char === '"') {
+                inString = false;
+            }
+        } else if (char === '"') {
+            inString = true;
+        } else if (char === '[' || char === '{') {
+            depth += 1;
+            if (char === '[' && tracksDepth < 0) {
+                tracksDepth = depth;
+            }
+        } else if (char === ']' || char === '}') {
+            depth -= 1;
+            if (char === '}' && depth === tracksDepth) {
+                lastTrackEnd = index;
+            }
+        }
+    }
+    if (lastTrackEnd < 0) {
+        return null;
+    }
+    const start = text.indexOf('{');
+    try {
+        return JSON.parse(`${text.slice(start, lastTrackEnd + 1)}]}`);
+    } catch {
+        // Not the shape this repair knows (tracks not the last key): give up.
+        return null;
+    }
 }
 
 export function getApproximateDuration(bars, tempo, meter = '4/4') {
@@ -301,7 +349,16 @@ export function parseScore(response, {
         throw new Error('Loop length must be a whole number of bars from 3 bars up to the two-minute preset.');
     }
 
-    const value = readJsonObject(response, 'score');
+    let value;
+    try {
+        value = readJsonObject(response, 'score');
+    } catch (error) {
+        value = closeCutScore(response);
+        if (!value) {
+            throw error;
+        }
+        console.warn('[Leitmotif] The score reply was cut off; kept the tracks it finished.');
+    }
 
     // The model's own tempo matters only when no target tempo replaces it.
     if (targetTempo === undefined

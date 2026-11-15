@@ -118,8 +118,7 @@ test('accepts events through the end of a selected 16-bar loop', () => {
 test('accepts the 120-second preset at the highest supported tempo', () => {
     for (const tempo of [85, 130]) {
         const bars = getLoopBars(120, tempo);
-        const expectedBars = Math.round(120 * tempo / 240);
-        assert.equal(bars, expectedBars);
+        assert.equal(bars, Math.round(120 * tempo / 240 / 4) * 4);
         const longScore = {
             ...validScore,
             tracks: validScore.tracks.map((track, index) => index === 1
@@ -131,7 +130,7 @@ test('accepts the 120-second preset at the highest supported tempo', () => {
         };
         const parsed = parseScore(longScore, { loopBeats: bars * 4, targetTempo: tempo });
         assert.equal(parsed.loopBeats, bars * 4);
-        assert.ok(Math.abs(getApproximateDuration(bars, tempo) - 120) <= 2);
+        assert.ok(Math.abs(getApproximateDuration(bars, tempo) - 120) <= 8);
     }
 });
 
@@ -140,8 +139,10 @@ test('maps duration presets to the nearest whole-bar loop at the selected tempo'
         for (const tempo of [50, 74, 130]) {
             for (const meter of ['3/4', '4/4']) {
                 const bars = getLoopBars(seconds, tempo, meter);
-                assert.ok(bars >= 3);
-                assert.ok(Math.abs(getApproximateDuration(bars, tempo, meter) - seconds) <= 3);
+                assert.equal(bars % 4, 0);
+                assert.ok(bars >= 4);
+                const exactBars = seconds * tempo / 60 / (meter === '3/4' ? 3 : 4);
+                assert.ok(Math.abs(bars - exactBars) <= 2 || bars === 4);
             }
         }
     }
@@ -436,4 +437,14 @@ test('moves notes in octave 0 or 7 and above into the role range instead of drop
     const parsed = parseScore(response);
     assert.deepEqual(parsed.tracks[1].events[0].notes, ['E1']);
     assert.deepEqual(parsed.tracks[2].events[0].notes, ['C6', 'D6']);
+});
+
+test('a score cut off by the length limit keeps its finished tracks', () => {
+    const ordered = { ...validScore, tracks: [validScore.tracks[2], validScore.tracks[1], validScore.tracks[0]] };
+    const full = JSON.stringify(ordered);
+    const cut = full.slice(0, full.indexOf('"role":"harmony"') + 40);
+    const parsed = parseScore(cut, { loopBeats: 16 });
+    assert.deepEqual(parsed.tracks.map(track => track.role), ['melody', 'bass']);
+    const cutInMelody = full.slice(0, full.indexOf('"role":"bass"') - 30);
+    assert.throws(() => parseScore(cutInMelody, { loopBeats: 16 }), /invalid JSON/);
 });

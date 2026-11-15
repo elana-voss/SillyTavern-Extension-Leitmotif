@@ -1,7 +1,7 @@
 // Tests for composer.mjs: the score prompt built from the brief and the profile.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getComposerPrompt, INSTRUMENT_LABELS } from '../src/composer.mjs';
+import { getComposerPrompt, getComposerRetryPrompt, getScoreResponseLength, INSTRUMENT_LABELS } from '../src/composer.mjs';
 import { parseBrief, sampleVarietySeed } from '../src/brief.mjs';
 import { INSTRUMENTS } from '../src/score.mjs';
 
@@ -36,4 +36,12 @@ test('every instrument has a label', () => {
     }
     assert.equal(INSTRUMENT_LABELS.acoustic_grand_piano, 'Grand piano');
     assert.equal(INSTRUMENT_LABELS.lead_8_bass__lead, 'Lead 8 Bass lead');
+});
+
+test('the score reply has room to think and to write every bar, also on the retry', () => {
+    assert.equal(getScoreResponseLength(8), 10000 + 1600 * 8);
+    const retry = getComposerRetryPrompt('PROMPT', 'The model returned invalid JSON: cut.');
+    assert.ok(retry.startsWith('PROMPT'));
+    assert.doesNotMatch(retry, /3-6 events/);
+    assert.match(retry, /as active as the brief demands/);
 });

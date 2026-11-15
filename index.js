@@ -15,6 +15,7 @@ import {
 } from './src/score.mjs';
 import {
     BRIEF_JSON_SCHEMA,
+    BRIEF_RESPONSE_LENGTH,
     createBriefCache,
     getBriefPrompt,
     parseBrief,
@@ -22,7 +23,7 @@ import {
     VARIETY_LEVELS,
 } from './src/brief.mjs';
 import { buildCharacterProfile } from './src/character.mjs';
-import { COMPOSER_SYSTEM_PROMPT, getComposerPrompt, getComposerRetryPrompt } from './src/composer.mjs';
+import { COMPOSER_SYSTEM_PROMPT, getComposerPrompt, getComposerRetryPrompt, getScoreResponseLength } from './src/composer.mjs';
 import { downloadScoreAsMidi } from './src/midi-export.mjs';
 import { createPlayback } from './src/playback.mjs';
 import { createScriptLoader } from './src/script-loader.mjs';
@@ -268,7 +269,7 @@ async function analyzeCharacter(character) {
                 ? prompt
                 : `${prompt}\n\nYour previous attempt was not valid JSON. Return a complete, compact music brief object only. Do not use markdown or omit closing brackets.`,
             systemPrompt: 'You are a music analyst. Return valid JSON only, following the requested brief schema exactly.',
-            responseLength: 1200,
+            responseLength: BRIEF_RESPONSE_LENGTH,
             jsonSchema: {
                 name: 'music_brief',
                 description: 'Music brief capturing the character\'s musical identity.',
@@ -324,19 +325,32 @@ async function handleGenerateClick() {
         };
         let score;
         let failureReason = '';
+        let responseLength = getScoreResponseLength(bars);
         for (let attempt = 0; attempt < 2; attempt += 1) {
-            const response = await generateRaw({
-                prompt: attempt === 0 ? prompt : getComposerRetryPrompt(prompt, failureReason),
-                systemPrompt: COMPOSER_SYSTEM_PROMPT,
-                responseLength: Math.ceil((attempt === 0 ? 2400 : 3000) * bars / 4),
-                jsonSchema: {
-                    name: 'leitmotif_score',
-                    description: 'Looping character theme score with timed events.',
-                    value: SCORE_JSON_SCHEMA,
-                    strict: true,
-                    returnInvalid: true,
-                },
-            });
+            let response;
+            try {
+                response = await generateRaw({
+                    prompt: failureReason ? getComposerRetryPrompt(prompt, failureReason) : prompt,
+                    systemPrompt: COMPOSER_SYSTEM_PROMPT,
+                    responseLength,
+                    jsonSchema: {
+                        name: 'leitmotif_score',
+                        description: 'Looping character theme score with timed events.',
+                        value: SCORE_JSON_SCHEMA,
+                        strict: true,
+                        returnInvalid: true,
+                    },
+                });
+            } catch (error) {
+                // Some models cap their reply at 8K tokens and refuse a larger
+                // request: ask once more within that cap.
+                if (attempt === 1 || responseLength <= 8000) {
+                    throw error;
+                }
+                console.warn(LOG_TAG, 'The score request failed; retrying once with a reply limit of 8000 tokens.', error);
+                responseLength = 8000;
+                continue;
+            }
             try {
                 score = parseScore(response, parseOptions);
                 break;

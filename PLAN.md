@@ -4,6 +4,7 @@ Run by the skill software-project. Every token figure is Claude's estimate (inpu
 
 ## Requirements (the owner's words)
 
+- R2 "I want a Fable high medium opinion of how to improve the created music by the remote LLM. concrete, actionable suggestions. The remote LLM may be ANY current LLM available" ("current Kimi / DeepSeek / GLM models and the like. Not small or old models"); themes made by Claude models through the API key (cap "about USD8, that is the max cap"), judged by Fable; Fable never composes.
 - R1 "evaluate the other LLMs work and suggest bug fixes or improvements in various areas. the idea is to have you review this project, fix or improve it and then we are done here."
 
 ## Review of the existing work (Claude, 2026-11-13)
@@ -33,7 +34,8 @@ Left as it is: the 300 MB of samples inside the repo (a deliberate choice for an
 | 1 | Defects 1-7 and a test bed | R1 | Done | Must | 3M | 0 | 5.6M (two agents, a hand-over at the context limit; most of it cache reads at 40-60k context per turn), 0; code review none (not due) |
 | 2 | Structure: modules, shared helpers, tests | R1 | Done | Must | 4M | 0 | 4.5M (two agents, a hand-over at the context limit, and the review), 0; code review Fable 5.2 medium |
 | 3 | One live run and close | R1 | Done | Must | 1M | about 15k on the owner's SillyTavern backend | Claude 1.6M, provider 18,741 tokens (two generations, as the backend reported them); code review none (not due) |
-| | Total | | | | 8M | about 15k | 11.7M Claude; 18,741 provider (the backend reported 0 USD) |
+| 4 | Music quality: Fable reviews the prompts and blind-judges Opus and Sonnet themes, before and after the prompt changes | R2 | Done | Must | 3M | under 8 USD on the API key | Claude about 3M (estimate; not measured), Fable judging 0.25M; API 7.74 USD over 60 calls (prices from Anthropic's list, counted by the script); code review none (not due) |
+| | Total | | | | 11M | about 15k; under 8 USD | 14.9M Claude; 18,741 provider (the backend reported 0 USD); 7.74 USD API |
 
 Each milestone ends with the tests passing and the extension working in a local SillyTavern on the test bed.
 
@@ -55,9 +57,22 @@ One theme generated through the owner's configured backend with the finished cod
 
 Done: through the owner's backend (NanoGPT, GLM 5.3) on the test bed, the brief preview filled, a five-track 3/4 theme at 78 BPM played, stopped and downloaded as a valid five-track MIDI file, with no warnings about dropped or moved notes. The first try failed only because the bed waited 90 s for a score the model took longer to write; the bed now waits up to 10 minutes on a live run. Tests: 49 unit, test bed 11 of 11 on the fake, 4 of 4 live. Next: none; the list is done.
 
+### 4. Music quality
+
+Themes made with the extension's own prompts and parser (`tools/music-eval/generate.mjs`), shown bar by bar with counted facts (`render.mjs`), and scored 1-10 blind by Fable 5.2 high. Four original characters, Opus 5.5 and Sonnet 5.5.
+
+- Before: 8 of 8 first score replies were cut off; 2 of 8 themes failed; the 6 that played scored 4.3 on average (accompaniment held still).
+- After (groove from bass and harmony, four-bar phrases, the brief limited to what General MIDI plays, larger reply limits, cut replies kept up to the last whole track, retry wording): 8 of 8 complete on the first try, 7.9 on average.
+- Then rules for a counter line, motif development and texture register: the two complete themes rose 2 points each, the two cut off at the limit fell; the limit was raised to 10,000 + 1,600 per bar, and a 16-bar theme then finished first time with five tracks (28,802 tokens).
+- The test script streams its replies: Node's fetch drops a reply that takes over five minutes.
+- Not done, Fable's further prompt rules (each adds thinking, and so reply length): counter at least 40 % of the loop; no bar rhythm repeated more than twice running; bass fill before each section; melody above the harmony; at most two notes in the texture.
+
+Version 0.2.1.
+
 ## Questions for the owner
 
-None open.
+- Fable's suggested features, not built: play "swing" feel as swing (today it is only shown); a drum part; small timing and velocity humanisation in playback.
+
 
 ## Decisions
 
