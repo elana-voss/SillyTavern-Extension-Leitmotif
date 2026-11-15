@@ -225,19 +225,14 @@ test('a 30-word surprise is cut at a word, not mid-word', () => {
 });
 
 test('the brief schema has the timbre enums, groove cells and phrase plan', () => {
-    const { timbre, groove_cells: grooveCells, phrase_plan: phrasePlan, surprise, energy_curve: energyCurve } = BRIEF_JSON_SCHEMA.properties;
+    const { timbre, groove_cells: grooveCells, phrase_plan: phrasePlan, surprise } = BRIEF_JSON_SCHEMA.properties;
     assert.deepEqual(timbre.properties.bass.enum, [...TRACK_ROLES.bass, null]);
     assert.deepEqual(timbre.properties.drums.enum, ['drum_kit', null]);
     assert.ok(BRIEF_JSON_SCHEMA.required.includes('groove_cells') && BRIEF_JSON_SCHEMA.required.includes('phrase_plan'));
     assert.deepEqual(grooveCells.required, ['bass', 'harmony', 'drums']);
     assert.deepEqual(phrasePlan.items.enum, ['statement', 'answer', 'sequence', 'fragment', 'climax', 'cadence']);
     assert.match(surprise.description, /At most 15 words/);
-    assert.match(surprise.description, /second half of the loop.*actual notes with a note outside the mode, not a Roman numeral/);
-    assert.match(timbre.properties.drums.description, /100 BPM or more, or the energy plan reaches high or full.*stillness/);
-    assert.match(energyCurve.description, /at most one level from the first.*low < medium < high < full; rise, fall or break may be the last value/);
-    for (const replaced of [/borrowed chord/, /register drop/, /tacet part/, /rhythmic shift/, /when the character wants drums/]) {
-        assert.doesNotMatch(`${surprise.description} ${timbre.properties.drums.description}`, replaced);
-    }
+    assert.match(surprise.description, /borrowed chord.*register drop.*tacet part.*rhythmic shift/);
 });
 
 test('groove cells and the phrase plan are parsed and reach the composer section', () => {
@@ -264,16 +259,4 @@ test('the brief prompt allows drums and its example carries the new fields', () 
     assert.match(prompt, /"groove_cells":\{"bass":\[/);
     assert.match(prompt, /"phrase_plan":\[/);
     assert.match(prompt, /"bass":"acoustic_bass\|/);
-});
-
-test('the brief prompt asks for drums at speed or high energy and keeps the loop seam in the energy plan', () => {
-    const prompt = getBriefPrompt({ name: 'Solo', profileFields: 'x' }, {});
-    assert.match(prompt, /If tempo is 100 BPM or more, or the energy plan reaches high or full, include a drums track \(kit or hand percussion\) and name its groove in the brief; leave drums out only when the character calls for stillness\./);
-    assert.match(prompt, /Hand percussion is drum_kit played on rim, clap and toms/);
-    assert.match(prompt, /the last value of the energy plan is at most one level from the first \(end on a fall or a pickup, not full into low\)/);
-    assert.match(prompt, /low < medium < high < full; rise, fall or break may be the last value/);
-    assert.match(prompt, /"surprise":"at most 15 words: [^"]*second half[^"]*actual notes/);
-    for (const replaced of [/drums is drum_kit only when the character calls for drums/, /borrowed chord/, /register drop/]) {
-        assert.doesNotMatch(prompt, replaced);
-    }
 });

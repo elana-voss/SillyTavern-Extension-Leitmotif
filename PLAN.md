@@ -189,6 +189,7 @@ From Fable 5.2 high's blind judgement in 5d (the full report in the scratchpad, 
 - 6a: the composer's "the last returns and resolves into bar one" became "the last returns into bar one", as (8) forbids ending on the tonic.
 - 6a: the swing rule is one fixed prompt sentence ("When the feel is swing, playback swings the eighths: write them straight"), not only in swung briefs; the groove-cells fallback is a parenthesis after the tag, as `<phrase_plan>` has.
 - 6a: the composer example's texture sits in octave 6, the only octave no other example track uses; every example token carries its own velocity.
+- 6: the owner, 2026-11-15, "go" to reverting the prompt: Fable's blind judgement scored 0.2.3 level with 0.2.2 (7.125 each) with a fifth longer composer rules, so `src/brief.mjs` and `src/composer.mjs` prompt text are back to 0.2.2's; kept are the drum swing by position, the harmony and texture clamp to octaves 3-6 (the prompt's octave line says 3-6 to match), the swing sentence and the straight example melody; `npm test` 93/93.
 
 ## Trials
 
