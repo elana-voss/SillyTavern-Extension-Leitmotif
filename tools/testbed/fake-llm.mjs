@@ -1,7 +1,8 @@
 // A fake OpenAI-style chat completion server for the test bed. It answers the
-// extension's two calls (the music brief, then the score) and fails on demand
-// the ways a real provider can: key refused, 500, reply cut mid-body, invalid
-// JSON. The failure applies to the score call; the brief call always answers.
+// extension's two calls (the music brief, then the score in the compact
+// per-bar form) and fails on demand the ways a real provider can: key refused,
+// 500, reply cut mid-body, invalid JSON. The failure applies to the score call;
+// the brief call always answers.
 import http from 'node:http';
 
 export const FAKE_MODES = Object.freeze(['ok', 'refused', 'error500', 'cut', 'invalid']);
@@ -34,29 +35,17 @@ const SCORE = {
         {
             role: 'melody',
             instrument: 'flute',
-            events: [
-                { beat: 0, duration: 1, velocity: 90, notes: ['D4'] },
-                { beat: 1, duration: 0.5, velocity: 80, notes: ['F4'] },
-                { beat: 2, duration: 2, velocity: 85, notes: ['A4'] },
-            ],
+            bars: ['0:D4:1:90 1:F4:.5:80 2:A4:2:85'],
         },
         {
             role: 'bass',
             instrument: 'acoustic_bass',
-            events: [
-                { beat: 0, duration: 4, velocity: 90, notes: ['D2'] },
-                { beat: 4, duration: 4, velocity: 90, notes: ['A1'] },
-            ],
+            bars: ['v90 0:D2:4', '0:A1:4:90'],
         },
         {
             role: 'drums',
             instrument: 'drum_kit',
-            events: [
-                { beat: 0, duration: 0.5, velocity: 100, notes: ['kick', 'closed_hat'] },
-                { beat: 0.5, duration: 0.5, velocity: 60, notes: ['closed_hat'] },
-                { beat: 1, duration: 0.5, velocity: 90, notes: ['snare', 'closed_hat'] },
-                { beat: 1.5, duration: 0.5, velocity: 60, notes: ['open_hat'] },
-            ],
+            bars: ['0:kick+closed_hat:.5:100 .5:closed_hat:.5:60 1:snare+closed_hat:.5:90 1.5:open_hat:.5:60'],
         },
     ],
 };

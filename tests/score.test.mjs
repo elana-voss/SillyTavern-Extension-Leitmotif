@@ -440,12 +440,8 @@ test('moves notes in octave 0 or 7 and above into the role range instead of drop
     assert.deepEqual(parsed.tracks[2].events[0].notes, ['C6', 'D6']);
 });
 
-test('a score cut off by the length limit keeps its finished tracks', () => {
-    const ordered = { ...validScore, tracks: [validScore.tracks[2], validScore.tracks[1], validScore.tracks[0]] };
-    const full = JSON.stringify(ordered);
-    const cut = full.slice(0, full.indexOf('"role":"harmony"') + 40);
-    const parsed = parseScore(cut, { loopBeats: 16 });
-    assert.deepEqual(parsed.tracks.map(track => track.role), ['melody', 'bass']);
-    const cutInMelody = full.slice(0, full.indexOf('"role":"bass"') - 30);
-    assert.throws(() => parseScore(cutInMelody, { loopBeats: 16 }), /invalid JSON/);
+test('a score cut off before any complete event reports the original error', () => {
+    const full = JSON.stringify(validScore);
+    const cut = full.slice(0, full.indexOf('"beat"'));
+    assert.throws(() => parseScore(cut, { loopBeats: 16 }), /did not contain a JSON score/);
 });

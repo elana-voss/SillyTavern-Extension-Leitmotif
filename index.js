@@ -336,7 +336,7 @@ async function handleGenerateClick() {
                     responseLength,
                     jsonSchema: {
                         name: 'leitmotif_score',
-                        description: 'Looping character theme score with timed events.',
+                        description: 'Looping character theme score, one compact string per bar.',
                         value: SCORE_JSON_SCHEMA,
                         strict: true,
                         returnInvalid: true,

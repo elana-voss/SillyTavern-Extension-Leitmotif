@@ -1,11 +1,14 @@
-// The score: its JSON schema for the composer and parseScore, which repairs a
-// generated score into tracks of timed events (pitched roles plus an optional
-// drums track on a fixed kit) and carries the brief's feel.
+// The score: its JSON schema for the composer (per-bar strings, the compact
+// form) and parseScore, which reads that form or the older events form,
+// salvages a cut reply, and repairs it into tracks of timed events (pitched
+// roles plus an optional drums track on a fixed kit) carrying the brief's feel.
 //
 // The complete General MIDI palette: program number per instrument name. The
 // same name is the FluidR3 sample file shipped in samples/ ({name}-mp3.js), so
 // every entry here must have a matching sample in the repository.
-import { normalizeResponseText, readJsonObject } from './model-response.mjs';
+import { compactBarsToEvents } from './compact-score.mjs';
+import { readJsonObject } from './model-response.mjs';
+import { closeCutScore, reachesLastBar } from './score-salvage.mjs';
 
 export const INSTRUMENTS = Object.freeze({
     accordion: 21,
@@ -214,7 +217,7 @@ export const SCORE_JSON_SCHEMA = Object.freeze({
             items: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['role', 'instrument', 'events'],
+                required: ['role', 'instrument', 'bars'],
                 properties: {
                     role: {
                         type: 'string',
@@ -224,32 +227,10 @@ export const SCORE_JSON_SCHEMA = Object.freeze({
                         type: 'string',
                         enum: [...Object.keys(INSTRUMENTS), DRUM_INSTRUMENT],
                     },
-                    events: {
+                    bars: {
                         type: 'array',
-                        items: {
-                            type: 'object',
-                            additionalProperties: false,
-                            required: ['beat', 'duration', 'velocity', 'notes'],
-                            properties: {
-                                beat: {
-                                    type: 'number',
-                                    description: 'Start position in beats on the sixteenth-note grid, 0 to just before the loop length.',
-                                },
-                                duration: {
-                                    type: 'number',
-                                    description: 'Length in beats, on the sixteenth-note grid; beat plus duration fits inside the loop.',
-                                },
-                                velocity: {
-                                    type: 'number',
-                                    description: 'Integer from 1 to 127.',
-                                },
-                                notes: {
-                                    type: 'array',
-                                    items: { type: 'string' },
-                                    description: 'One to five simultaneous note names like C4, F#3, or Bb4; on the drums track drum names.',
-                                },
-                            },
-                        },
+                        items: { type: 'string' },
+                        description: 'One string per bar, bar 1 first. A bar is space-separated beat:notes:duration tokens with an optional :velocity (1-127); beat is the position within the bar on the sixteenth-note grid, notes are names like C4, F#3 or Bb4 joined by + (drum names on the drums track), duration in beats. A leading vNN sets the bar velocity; "=n" repeats earlier bar n; "" is a silent bar.',
                     },
                 },
             },
@@ -282,53 +263,6 @@ export function getLoopBars(lengthSeconds, tempo, meter = '4/4') {
     }
     // Whole four-bar phrases: a loop of 10 or 13 bars leaves a ragged phrase before the seam.
     return Math.max(4, Math.round(lengthSeconds * tempo / 60 / getBeatsPerBar(meter) / 4) * 4);
-}
-
-// A reply cut off by the length limit: keep every track that closed, drop the
-// one being written, close the JSON. Null when no track closed or the result
-// still does not parse; the caller then reports the original error.
-function closeCutScore(response) {
-    const text = normalizeResponseText(response);
-    const tracksAt = text?.indexOf('"tracks"') ?? -1;
-    if (tracksAt < 0) {
-        return null;
-    }
-    let depth = 0;
-    let inString = false;
-    let tracksDepth = -1;
-    let lastTrackEnd = -1;
-    for (let index = tracksAt; index < text.length; index += 1) {
-        const char = text[index];
-        if (inString) {
-            if (char === '\\') {
-                index += 1;
-            } else if (char === '"') {
-                inString = false;
-            }
-        } else if (char === '"') {
-            inString = true;
-        } else if (char === '[' || char === '{') {
-            depth += 1;
-            if (char === '[' && tracksDepth < 0) {
-                tracksDepth = depth;
-            }
-        } else if (char === ']' || char === '}') {
-            depth -= 1;
-            if (char === '}' && depth === tracksDepth) {
-                lastTrackEnd = index;
-            }
-        }
-    }
-    if (lastTrackEnd < 0) {
-        return null;
-    }
-    const start = text.indexOf('{');
-    try {
-        return JSON.parse(`${text.slice(start, lastTrackEnd + 1)}]}`);
-    } catch {
-        // Not the shape this repair knows (tracks not the last key): give up.
-        return null;
-    }
 }
 
 export function getApproximateDuration(bars, tempo, meter = '4/4') {
@@ -384,6 +318,7 @@ export function parseScore(response, {
     }
 
     let value;
+    let salvaged = false;
     try {
         value = readJsonObject(response, 'score');
     } catch (error) {
@@ -391,7 +326,8 @@ export function parseScore(response, {
         if (!value) {
             throw error;
         }
-        console.warn('[Leitmotif] The score reply was cut off; kept the tracks it finished.');
+        salvaged = true;
+        console.warn('[Leitmotif] The score reply was cut off; kept the bars and events it finished.');
     }
 
     // The model's own tempo matters only when no target tempo replaces it.
@@ -446,9 +382,13 @@ export function parseScore(response, {
 
         // Drums may fill every sixteenth (a hat line); pitched parts at most three per beat.
         const maxEvents = loopBeats * (drums ? 4 : 3);
-        if (!Array.isArray(track.events)
-            || track.events.length < 1
-            || track.events.length > maxEvents) {
+        // The compact form (bars) becomes the older events form here.
+        const rawEvents = Array.isArray(track.bars)
+            ? compactBarsToEvents(track.bars, { beatsPerBar, loopBars: loopBeats / beatsPerBar, track: index + 1 })
+            : track.events;
+        if (!Array.isArray(rawEvents)
+            || rawEvents.length < 1
+            || rawEvents.length > maxEvents) {
             throw new Error(`Track ${index + 1} must contain 1 to ${maxEvents} timed events.`);
         }
 
@@ -457,7 +397,7 @@ export function parseScore(response, {
         // names) so one bad event can never kill a whole generation. Only a
         // track without any usable event left is an error.
         const adjustedEvents = [];
-        const events = track.events
+        const events = rawEvents
             .map((event, eventIndex) => {
                 if (!event || typeof event !== 'object' || Array.isArray(event)) {
                     throw new Error(`Track ${index + 1}, event ${eventIndex + 1} must be an object.`);
@@ -528,6 +468,13 @@ export function parseScore(response, {
     if (REQUIRED_ROLES.some(role => !seenRoles.has(role))
         || !CORE_ROLES.some(role => seenRoles.has(role))) {
         throw new Error('The score must contain a melody track plus at least one of harmony or bass tracks.');
+    }
+
+    // A cut reply is kept only when it still sounds to the loop's end.
+    const byRole = role => tracks.find(track => track.role === role);
+    if (salvaged && !(reachesLastBar(byRole('melody'), loopBeats, beatsPerBar)
+        && CORE_ROLES.some(role => reachesLastBar(byRole(role), loopBeats, beatsPerBar)))) {
+        throw new Error('The score reply was cut off before the melody and the bass or harmony reached the last bar.');
     }
 
     return {
