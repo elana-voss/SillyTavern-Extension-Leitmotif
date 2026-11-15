@@ -35,8 +35,9 @@ Left as it is: the 300 MB of samples inside the repo (a deliberate choice for an
 | 2 | Structure: modules, shared helpers, tests | R1 | Done | Must | 4M | 0 | 4.5M (two agents, a hand-over at the context limit, and the review), 0; code review Fable 5.2 medium |
 | 3 | One live run and close | R1 | Done | Must | 1M | about 15k on the owner's SillyTavern backend | Claude 1.6M, provider 18,741 tokens (two generations, as the backend reported them); code review none (not due) |
 | 4 | Music quality: Fable reviews the prompts and blind-judges Opus and Sonnet themes, before and after the prompt changes | R2 | Done | Must | 3M | under 8 USD on the API key | Claude about 3M (estimate; not measured), Fable judging 0.25M; API 7.74 USD over 60 calls (prices from Anthropic's list, counted by the script); code review none (not due) |
-| 5 | Every Fable suggestion built | R2 | Done | Must | 12M | subscription, about 0.6M output | 5a 4.1M against 4M (two agents, a hand-over at the context limit; code review Fable 5.2 medium); 5b 2.4M against 4M (code review Fable 5.2 medium); 5c 1.4M against 1M (code review none, not due) |
-| | Total | | | | 23M | about 15k; under 8 USD | 14.9M Claude; 18,741 provider (the backend reported 0 USD); 7.74 USD API |
+| 5 | Every Fable suggestion built | R2 | In progress (milestone review) | Must | 12M | subscription, about 0.6M output | 5a 4.1M against 4M (two agents, a hand-over at the context limit; code review Fable 5.2 medium); 5b 2.4M against 4M (code review Fable 5.2 medium); 5c 1.4M against 1M (code review none, not due); 5d 5.1M against 3M (two agents, a hand-over at the context limit; blind judgement Fable 5.2 high 0.5M of it; code review none, not due) |
+| 6 | Fable's eight judging suggestions built (0.2.3) | R2 | In progress | Must | 4M | subscription, about 0.2M output | |
+| | Total | | | | 27M | about 15k; under 8 USD | 14.9M Claude; 18,741 provider (the backend reported 0 USD); 7.74 USD API |
 
 Each milestone ends with the tests passing and the extension working in a local SillyTavern on the test bed.
 
@@ -109,6 +110,26 @@ Done (5d): 8 of 8 themes ok, each score on the first try. Score reply output tok
 Version 0.2.2.
 
 Total 12M Claude tokens; subscription about 0.6M output tokens of Sonnet and Opus; no API money.
+
+### 6. Fable's eight judging suggestions built (the owner, 2026-11-15: "build them now, and never publish without my go")
+
+From Fable 5.2 high's blind judgement in 5d (the full report in the scratchpad, `fable4-judge.txt`). Each fix is Fable's prompt fix, built as written; each replaces the older line it contradicts (in `src/composer.mjs` and `src/brief.mjs`), not appended beside it. Estimate 4M Claude.
+
+6a. The prompt rules (prompt text and the brief's schema descriptions; no review due). Estimate 1.5M.
+- (1) Drums: "If tempo is 100 BPM or more, or the energy plan reaches high or full, include a drums track (kit or hand percussion) and name its groove in the brief; leave drums out only when the character calls for stillness." Replaces the brief's playback rule ("drums is drum_kit only when the character calls for drums", `brief.mjs:209`) and the schema description of `timbre.drums` (`brief.mjs:88`).
+- (2) "Keep one groove cell but change it at least every 4 bars (walk-up, dropped beat, new inversion, fill); the second half of the loop must use a different chord progression or bass line from the first half; no melody rhythm unchanged for more than 2 bars in a row; a drum fill at most every 4 bars and never the same fill twice." Replaces the repetition line (`composer.mjs:94`, "more than twice running"), "subtle variation" (`:87`) and the drums rule's "a fill before each phrase" (`:74`).
+- (3) "End each 2-4 bar phrase with at least one beat of melody silence; the counter plays its answer in those gaps and holds or rests while the melody moves; the counter may copy the melody's rhythm for at most one bar." Replaces "no large silent stretches" (`:96`) and the counter's "answers every melody gap of 2 beats or more" (`:97`).
+- (4) "Set the peak velocity from the character: quiet, shy or tired characters peak near v84 and use no crash; rise by at most 12 per bar. Inside a bar, accent the strong beats and soften passing notes - no bar with one velocity on every note. Keep the lead inside its comfortable range (accordion, trumpet, flute below C6)." Replaces "Vary velocities ... constant-volume patterns" (`:98`).
+- (5) "When the chord changes, re-voice every held note and pad; outside the stated surprise, no note a semitone from a chord tone lasts longer than half a beat; chromatic approach notes in the bass are at most an eighth and not in consecutive bars." Replaces the semitone line from 5c (23).
+- (6) "Only the bass plays below C3; chord voicings sit between C3 and C5; the texture takes a register no other track uses and never the harmony's notes in the same octave." Replaces the octave ranges for harmony and texture (`:86`) and the texture's "an octave away from the harmony voicing" (`:98`).
+- (7) "Place the surprise in the second half of the loop, after the motif has been heard at least twice; it must contain a note outside the mode and show in at least two tracks; write the chord as its actual notes, not a Roman numeral." Replaces the surprise line (`:90`) and the brief's `surprise` description (`brief.mjs:92`).
+- (8) "The last bar leads into bar 1: end on V, bVII or a tritone substitute, never on the tonic chord, with the melody within a step of its first note; the last value of the energy plan is at most one level from the first (end on a fall or a pickup, not full into low)." Replaces "the last bar ends off the tonic" (`:96`) and goes into the brief's energy_curve rule (`brief.mjs:208`).
+- Test: the composer prompt holds each rule and none of the replaced lines; the brief prompt holds (1) and (8).
+
+6b. Live check and music. Estimate 2.5M Claude, subscription about 0.2M output (5d measured 149k for 8 themes).
+- The same 8 themes (four characters, Sonnet 5.5 and Opus 5.5) through `generate.mjs --cli`; Fable 5.2 high blind-judges them against the 8 of 0.2.2 (`music-eval/v022`), as in 5d; the `.mid` and `.wav` of each to the owner's Music folder, `Leitmotif 0.2.3 themes`.
+- The test bed on the fake; `npm test`. Commit locally only.
+- Version 0.2.3 (manifest and package) last, only after every check above has passed. Nothing is pushed and the installed copy is not updated until the owner's go.
 
 ## Questions for the owner
 
