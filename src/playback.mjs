@@ -151,7 +151,7 @@ export function schedulePass(score, players, { startTime, random }) {
         const player = players[trackIndex];
         const sustainedInstrument = SUSTAINED_INSTRUMENTS.has(track.instrument);
         for (const event of track.events) {
-            const { beat, duration } = swingEvent(event.beat, event.duration, score.feel);
+            const { beat, duration } = swingEvent(event.beat, event.duration, score.feel, { drums: track.role === DRUMS_ROLE });
             const requestedLength = duration * beatLength;
             for (const note of event.notes) {
                 const { when, velocity } = humanize(

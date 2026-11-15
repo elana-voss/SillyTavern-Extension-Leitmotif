@@ -1,6 +1,7 @@
 // Timing shared by playback and MIDI export: swing moves eighths onto a
-// triplet feel; humanisation (playback only, the MIDI file stays exact) nudges
-// each note's start and velocity by a small seeded random amount.
+// triplet feel (drums by position); humanisation (playback only, the MIDI
+// file stays exact) nudges each note's start and velocity by a small seeded
+// random amount.
 
 const SWING_SHIFT = 1 / 6;
 const HUMANIZE_SECONDS = 0.008;
@@ -9,12 +10,21 @@ const HUMANIZE_VELOCITY = 6;
 // The start and length in beats of an event under the score's feel. Swing
 // lengthens an on-beat eighth to 2/3 of a beat and starts an off-beat event of
 // an eighth or longer 1/6 of a beat late with its end unchanged, so the pair
-// meets exactly; a sixteenth line stays straight, else its hits would flam.
-export function swingEvent(beat, duration, feel) {
+// meets exactly; a pitched sixteenth line stays straight, else its hits would
+// flam. Drums swing by position, as a drummer does: the second half of each
+// beat is squeezed into its last third (0.5 -> 2/3, 0.75 -> 5/6), so a short
+// off-beat hat swings with the eighths and a sixteenth line keeps its order;
+// a hit keeps its length.
+export function swingEvent(beat, duration, feel, { drums = false } = {}) {
     if (feel !== 'swing') {
         return { beat, duration };
     }
     const position = beat % 1;
+    if (drums) {
+        return position < 0.5
+            ? { beat, duration }
+            : { beat: beat - position + 2 / 3 + (position - 0.5) * 2 / 3, duration };
+    }
     if (position === 0 && duration === 0.5) {
         return { beat, duration: 0.5 + SWING_SHIFT };
     }

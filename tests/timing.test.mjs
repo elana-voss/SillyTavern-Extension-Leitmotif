@@ -33,6 +33,19 @@ test('swing leaves a held note, a sixteenth and every straight event unchanged',
     assert.deepEqual(swingEvent(0.5, 0.5, undefined), { beat: 0.5, duration: 0.5 });
 });
 
+test('swing moves drums by position: the short off-beat hat swings with the eighths, a sixteenth line does not flam', () => {
+    const hat = swingEvent(1.5, 0.25, 'swing', { drums: true });
+    close(hat.beat, 1 + 2 / 3);
+    close(hat.duration, 0.25);
+    assert.deepEqual(swingEvent(1, 0.25, 'swing', { drums: true }), { beat: 1, duration: 0.25 });
+    const onsets = [0, 0.25, 0.5, 0.75].map(beat => swingEvent(beat, 0.25, 'swing', { drums: true }).beat);
+    for (let index = 1; index < onsets.length; index += 1) {
+        assert.ok(onsets[index] - onsets[index - 1] >= 1 / 6 - 1e-9, `onsets ${onsets[index - 1]} and ${onsets[index]}`);
+    }
+    close(onsets[3], 5 / 6);
+    assert.deepEqual(swingEvent(1.5, 0.25, 'straight', { drums: true }), { beat: 1.5, duration: 0.25 });
+});
+
 test('humanize stays within 8 ms and 6 velocity steps over 1,000 draws and never moves before the loop start', () => {
     const random = createRandom(7);
     for (let draw = 0; draw < 1000; draw += 1) {

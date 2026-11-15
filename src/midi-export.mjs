@@ -29,7 +29,7 @@ export function buildTracks(MidiWriter, score) {
             }));
         }
         for (const event of composition.events) {
-            const { beat, duration } = swingEvent(event.beat, event.duration, score.feel);
+            const { beat, duration } = swingEvent(event.beat, event.duration, score.feel, { drums });
             // Start and end round on their own, so a note ending where the next
             // begins never spills past that note's start.
             const startTick = Math.round(beat * TICKS_PER_BEAT);
