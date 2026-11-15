@@ -17,6 +17,7 @@ import { buildCharacterProfile } from '../../src/character.mjs';
 import { BRIEF_JSON_SCHEMA, BRIEF_RESPONSE_LENGTH, getBriefPrompt, parseBrief, sampleVarietySeed } from '../../src/brief.mjs';
 import { COMPOSER_SYSTEM_PROMPT, getComposerPrompt, getComposerRetryPrompt, getScoreResponseLength } from '../../src/composer.mjs';
 import { getLoopBars, METERS, parseScore, SCORE_JSON_SCHEMA } from '../../src/score.mjs';
+import { createRandom } from '../../src/timing.mjs';
 
 const CAP_USD = 7.9;
 // USD per million tokens (input, output); a conservative guess, not a price list.
@@ -34,15 +35,6 @@ if (!outDir || !label || models.length === 0) {
 const ledgerFile = path.join(outDir, 'ledger.json');
 fs.mkdirSync(path.join(outDir, label), { recursive: true });
 const ledger = fs.existsSync(ledgerFile) ? JSON.parse(fs.readFileSync(ledgerFile, 'utf8')) : { usd: 0, calls: [] };
-
-function mulberry32(seed) {
-    return () => {
-        seed = (seed + 0x6D2B79F5) | 0;
-        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-}
 
 // One CLI call from an empty folder: no settings, tools, MCP servers or
 // CLAUDE.md; the prompt on stdin (it passes the command line's length limit).
@@ -148,7 +140,7 @@ async function run(model, card, index) {
     const bars = getLoopBars(LENGTH_SECONDS, tempo, meter);
     const loopBeats = bars * METERS[meter];
     // The same seed per character in every run, so runs differ only by prompt and model.
-    const varietySeed = sampleVarietySeed('standard', mulberry32(1000 + index));
+    const varietySeed = sampleVarietySeed('standard', createRandom(1000 + index));
     const prompt = getComposerPrompt(character, { brief, bars, loopBeats, tempo, meter, varietySeed });
     record.composerPrompt = prompt;
     record.bars = bars;
