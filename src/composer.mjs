@@ -114,8 +114,9 @@ export function getComposerRetryPrompt(prompt, failureReason) {
 }
 
 // Reply room for a score: thinking models spend thousands of tokens before
-// writing. The per-bar term dates from the older events form (about 35 tokens
-// an event); it stays until compact replies are measured.
+// writing. Measured in 5d (compact form, Sonnet and Opus 5.5 through the CLI,
+// thinking included): replies of 7,554-35,114 tokens, at most 2,195 a bar
+// (Sonnet, 16 bars); the per-bar term is that with about a tenth to spare.
 export function getScoreResponseLength(bars) {
-    return 10000 + 1600 * bars;
+    return 10000 + 2400 * bars;
 }

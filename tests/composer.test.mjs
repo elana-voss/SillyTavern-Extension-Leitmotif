@@ -39,7 +39,7 @@ test('every instrument has a label', () => {
 });
 
 test('the score reply has room to think and to write every bar, also on the retry', () => {
-    assert.equal(getScoreResponseLength(8), 10000 + 1600 * 8);
+    assert.equal(getScoreResponseLength(8), 10000 + 2400 * 8);
     const retry = getComposerRetryPrompt('PROMPT', 'The model returned invalid JSON: cut.');
     assert.ok(retry.startsWith('PROMPT'));
     assert.doesNotMatch(retry, /3-6 events/);

@@ -7,6 +7,8 @@
 // --cli: the Claude Code CLI on the subscription (`claude -p`), sending the
 // extension's JSON schemas through --json-schema. The CLI checks the schema
 // itself; a provider's strict decoding, and a schema it refuses, are not tested.
+// CLAUDE_CLI names the CLI binary (default `claude`); a model newer than the
+// installed CLI needs a newer binary.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -53,7 +55,7 @@ function callCli(model, system, prompt, maxTokens, schema) {
         '--no-session-persistence', '--output-format', 'json', '--system-prompt', system,
         '--json-schema', JSON.stringify(schema)];
     return new Promise((resolve, reject) => {
-        const child = spawn('claude', cliArgs, { cwd: cliDir, env });
+        const child = spawn(process.env.CLAUDE_CLI || 'claude', cliArgs, { cwd: cliDir, env });
         let stdout = '';
         let stderr = '';
         child.stdout.on('data', chunk => { stdout += chunk; });
@@ -65,6 +67,10 @@ function callCli(model, system, prompt, maxTokens, schema) {
                 result = JSON.parse(stdout);
             } catch {
                 reject(new Error(`${model}: CLI exit ${code}: ${(stderr || stdout).slice(0, 300)}`));
+                return;
+            }
+            if (result.is_error) {
+                reject(new Error(`${model}: ${String(result.result).slice(0, 300)}`));
                 return;
             }
             const text = result.structured_output ? JSON.stringify(result.structured_output) : (result.result ?? '');
