@@ -35,7 +35,7 @@ Left as it is: the 300 MB of samples inside the repo (a deliberate choice for an
 | 2 | Structure: modules, shared helpers, tests | R1 | Done | Must | 4M | 0 | 4.5M (two agents, a hand-over at the context limit, and the review), 0; code review Fable 5.2 medium |
 | 3 | One live run and close | R1 | Done | Must | 1M | about 15k on the owner's SillyTavern backend | Claude 1.6M, provider 18,741 tokens (two generations, as the backend reported them); code review none (not due) |
 | 4 | Music quality: Fable reviews the prompts and blind-judges Opus and Sonnet themes, before and after the prompt changes | R2 | Done | Must | 3M | under 8 USD on the API key | Claude about 3M (estimate; not measured), Fable judging 0.25M; API 7.74 USD over 60 calls (prices from Anthropic's list, counted by the script); code review none (not due) |
-| 5 | Every Fable suggestion built | R2 | In progress | Must | 12M | subscription, about 0.6M output | 5a 4.1M against 4M (two agents, a hand-over at the context limit; code review Fable 5.2 medium); 5b 2.4M against 4M (code review Fable 5.2 medium); 5c 1.4M against 1M (code review none, not due) |
+| 5 | Every Fable suggestion built | R2 | Done | Must | 12M | subscription, about 0.6M output | 5a 4.1M against 4M (two agents, a hand-over at the context limit; code review Fable 5.2 medium); 5b 2.4M against 4M (code review Fable 5.2 medium); 5c 1.4M against 1M (code review none, not due) |
 | | Total | | | | 23M | about 15k; under 8 USD | 14.9M Claude; 18,741 provider (the backend reported 0 USD); 7.74 USD API |
 
 Each milestone ends with the tests passing and the extension working in a local SillyTavern on the test bed.
@@ -104,6 +104,10 @@ Done (5c): timbre enums per role and `timbre.drums`, whole-word text limits, `gr
 - The owner, 2026-11-15: "save the resulting / rendered music for me to hear". Each of the 8 new themes is saved as a `.mid` (the extension's export) and as a `.wav` rendered by the extension's own playback (samples, drum synth, swing, humanisation) in an OfflineAudioContext, one loop played twice, by a tracked script `tools/music-eval/render-audio.mjs` run in the headless browser the test bed uses; the files go to the owner's Music folder, `Leitmotif 0.2.2 themes`, named by model and character, outside the repo.
 - Version 0.2.2 (manifest and package), the test bed on the fake, commit named files, push, the installed copy updated.
 
+Done (5d): 8 of 8 themes ok, each score on the first try. Score reply output tokens (thinking included): Sonnet 5.5 14,343 (8 bars), 35,114 and 20,196 (16 bars), 21,258 (12 bars); Opus 5.5 7,831 (8 bars), 15,119 and 17,132 (16 bars), 7,554 (12 bars); the reply limit is 10,000 + 2,400 per bar (the old 16-bar limit, 35,600, came within 486 of Sonnet's longest). Fable 5.2 high blind judgement, means of 1-10: new 7.5 against after 7.0; Opus 8.25 new, 7.5 after; Sonnet 6.75 new, 6.5 after. Its ranked weaknesses: no drums where the character needs drive; accompaniment one bar pasted over an unchanged 4-bar loop; melody never rests, counter missing or shadowing; dynamics flat or too loud for quiet characters; held notes a semitone from the chord; mud below C3; surprise too early or not one; the loop seam stops or drops. The 8 themes as `.mid` and `.wav` in the owner's Music folder, `Leitmotif 0.2.2 themes`. Tests: 92 unit (`npm test`); the test bed on the fake 11 of 11. Installed copy updated.
+
+Version 0.2.2.
+
 Total 12M Claude tokens; subscription about 0.6M output tokens of Sonnet and Opus; no API money.
 
 ## Questions for the owner
@@ -137,6 +141,9 @@ Total 12M Claude tokens; subscription about 0.6M output tokens of Sonnet and Opu
 - `phrase_plan` is an enum list (statement, answer, sequence, fragment, climax, cadence), 2-8 entries; the composer falls back to that order without one.
 - `surprise` stays free text (at most 15 words) naming one of the four kinds; no separate enum field.
 - The composer's drums track is asked for only when the brief's `timbre.drums` is set (prompt rule and example); without a brief, no drums.
+- `generate.mjs --cli` takes the Claude CLI binary from `CLAUDE_CLI`: an older installed CLI refuses Opus 5.5, so a newer binary already on the machine was used.
+- The playback pass is exported (`createMasterChain`, `schedulePass`, `loadScorePlayers`, `createHumanizer` in `playback.mjs`) so `render-audio.mjs` renders offline with the extension's own sound.
+- For the blind judgement each view's last `calls:` line is stripped: the CLI's stop reason ("success") against the API's ("end_turn") would unblind the sets.
 
 ## Trials
 
