@@ -1,14 +1,20 @@
 // Runs the extension's own two prompts (brief, then score) against Claude
-// models through the Anthropic API, as plain text with the same system prompts,
-// token limits and one retry as index.js. Writes each reply, the parsed score
-// and its usage. Usage: node generate.mjs <out dir> <label> <model> [<model>...]
-// Needs ANTHROPIC_API_KEY; stops before the ledger in <out dir> passes the cap.
+// models with the same system prompts, token limits and one retry as index.js.
+// Writes each reply, the parsed score and its usage.
+// Usage: node generate.mjs [--cli] <out dir> <label> <model> [<model>...]
+// Default: the Anthropic API as plain text; needs ANTHROPIC_API_KEY and stops
+// before the ledger in <out dir> passes the cap.
+// --cli: the Claude Code CLI on the subscription (`claude -p`), sending the
+// extension's JSON schemas through --json-schema. The CLI checks the schema
+// itself; a provider's strict decoding, and a schema it refuses, are not tested.
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { buildCharacterProfile } from '../../src/character.mjs';
-import { BRIEF_RESPONSE_LENGTH, getBriefPrompt, parseBrief, sampleVarietySeed } from '../../src/brief.mjs';
+import { BRIEF_JSON_SCHEMA, BRIEF_RESPONSE_LENGTH, getBriefPrompt, parseBrief, sampleVarietySeed } from '../../src/brief.mjs';
 import { COMPOSER_SYSTEM_PROMPT, getComposerPrompt, getComposerRetryPrompt, getScoreResponseLength } from '../../src/composer.mjs';
-import { getLoopBars, METERS, parseScore } from '../../src/score.mjs';
+import { getLoopBars, METERS, parseScore, SCORE_JSON_SCHEMA } from '../../src/score.mjs';
 
 const CAP_USD = 7.9;
 // USD per million tokens (input, output); a conservative guess, not a price list.
@@ -16,9 +22,11 @@ const PRICES = { 'claude-sonnet-5-5': [3, 15], 'claude-opus-5-5': [5, 25], 'clau
 const BRIEF_SYSTEM = 'You are a music analyst. Return valid JSON only, following the requested brief schema exactly.';
 const LENGTH_SECONDS = 30;
 
-const [outDir, label, ...models] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const useCli = args[0] === '--cli';
+const [outDir, label, ...models] = useCli ? args.slice(1) : args;
 if (!outDir || !label || models.length === 0) {
-    console.error('usage: node generate.mjs <out dir> <label> <model> [<model>...]');
+    console.error('usage: node generate.mjs [--cli] <out dir> <label> <model> [<model>...]');
     process.exit(2);
 }
 const ledgerFile = path.join(outDir, 'ledger.json');
@@ -34,7 +42,45 @@ function mulberry32(seed) {
     };
 }
 
-async function call(model, system, prompt, maxTokens) {
+// One CLI call from an empty folder: no settings, tools, MCP servers or
+// CLAUDE.md; the prompt on stdin (it passes the command line's length limit).
+// The API key is removed so the call runs on the subscription.
+const cliDir = fs.mkdtempSync(path.join(os.tmpdir(), 'leitmotif-cli-'));
+function callCli(model, system, prompt, maxTokens, schema) {
+    const env = { ...process.env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxTokens) };
+    delete env.ANTHROPIC_API_KEY;
+    const cliArgs = ['-p', '--model', model, '--setting-sources', '', '--tools', '', '--strict-mcp-config',
+        '--no-session-persistence', '--output-format', 'json', '--system-prompt', system,
+        '--json-schema', JSON.stringify(schema)];
+    return new Promise((resolve, reject) => {
+        const child = spawn('claude', cliArgs, { cwd: cliDir, env });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', chunk => { stdout += chunk; });
+        child.stderr.on('data', chunk => { stderr += chunk; });
+        child.on('error', reject);
+        child.on('close', code => {
+            let result;
+            try {
+                result = JSON.parse(stdout);
+            } catch {
+                reject(new Error(`${model}: CLI exit ${code}: ${(stderr || stdout).slice(0, 300)}`));
+                return;
+            }
+            const text = result.structured_output ? JSON.stringify(result.structured_output) : (result.result ?? '');
+            const usage = { input_tokens: result.usage?.input_tokens ?? 0, output_tokens: result.usage?.output_tokens ?? 0 };
+            ledger.calls.push({ model, cli: true, output: usage.output_tokens, subtype: result.subtype });
+            fs.writeFileSync(ledgerFile, JSON.stringify(ledger, null, 1));
+            resolve({ text, usage, stop: result.subtype });
+        });
+        child.stdin.end(prompt);
+    });
+}
+
+async function call(model, system, prompt, maxTokens, schema) {
+    if (useCli) {
+        return callCli(model, system, prompt, maxTokens, schema);
+    }
     if (ledger.usd >= CAP_USD) {
         throw new Error(`Spending cap reached (${ledger.usd.toFixed(2)} USD).`);
     }
@@ -86,7 +132,7 @@ async function run(model, card, index) {
     let brief = null;
     for (let attempt = 0; attempt < 2 && !brief; attempt += 1) {
         const reply = await call(model, BRIEF_SYSTEM, attempt === 0 ? briefPrompt
-            : `${briefPrompt}\n\nYour previous attempt was not valid JSON. Return a complete, compact music brief object only. Do not use markdown or omit closing brackets.`, BRIEF_RESPONSE_LENGTH);
+            : `${briefPrompt}\n\nYour previous attempt was not valid JSON. Return a complete, compact music brief object only. Do not use markdown or omit closing brackets.`, BRIEF_RESPONSE_LENGTH, BRIEF_JSON_SCHEMA);
         record.calls.push({ stage: 'brief', ...reply });
         brief = parseBrief(reply.text);
     }
@@ -99,14 +145,15 @@ async function run(model, card, index) {
     const varietySeed = sampleVarietySeed('standard', mulberry32(1000 + index));
     const prompt = getComposerPrompt(character, { brief, bars, loopBeats, tempo, meter, varietySeed });
     record.composerPrompt = prompt;
+    record.bars = bars;
     let failureReason = '';
     for (let attempt = 0; attempt < 2 && !record.score; attempt += 1) {
         const reply = await call(model, COMPOSER_SYSTEM_PROMPT,
             attempt === 0 ? prompt : getComposerRetryPrompt(prompt, failureReason),
-            getScoreResponseLength(bars));
+            getScoreResponseLength(bars), SCORE_JSON_SCHEMA);
         record.calls.push({ stage: 'score', ...reply });
         try {
-            record.score = parseScore(reply.text, { loopBeats, meter, targetTempo: tempo });
+            record.score = parseScore(reply.text, { loopBeats, meter, targetTempo: tempo, feel: brief?.feel });
         } catch (error) {
             failureReason = error.message;
             record.failure = failureReason;
@@ -133,3 +180,4 @@ for (let start = 0; start < jobs.length; start += 2) {
     }));
 }
 console.log(`ledger ${ledger.usd.toFixed(3)} USD over ${ledger.calls.length} calls`);
+fs.rmSync(cliDir, { recursive: true, force: true });

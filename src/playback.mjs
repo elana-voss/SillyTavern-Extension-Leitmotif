@@ -122,6 +122,70 @@ export function loadTrackPlayers(tracks, { loadSample, createDrums }) {
 // The same humanisation every time a theme starts, varying from pass to pass.
 const HUMANIZE_SEED = 1;
 
+// The master bus every player writes into: a compressor, then a gain. Exported
+// with schedulePass and loadScorePlayers so tools/music-eval/render-audio.mjs
+// renders a theme offline through the same chain.
+export function createMasterChain(audioContext) {
+    const compressor = audioContext.createDynamicsCompressor();
+    compressor.threshold.value = -16;
+    compressor.knee.value = 12;
+    compressor.ratio.value = 8;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.2;
+    const masterGain = audioContext.createGain();
+    masterGain.gain.value = 0.75;
+    compressor.connect(masterGain);
+    masterGain.connect(audioContext.destination);
+    return compressor;
+}
+
+// A fresh humaniser, the same for every playback of a theme.
+export function createHumanizer() {
+    return createRandom(HUMANIZE_SEED);
+}
+
+// One pass of the loop from startTime: every note swung, humanised and played.
+export function schedulePass(score, players, { startTime, random }) {
+    const beatLength = 60 / score.tempo;
+    score.tracks.forEach((track, trackIndex) => {
+        const player = players[trackIndex];
+        const sustainedInstrument = SUSTAINED_INSTRUMENTS.has(track.instrument);
+        for (const event of track.events) {
+            const { beat, duration } = swingEvent(event.beat, event.duration, score.feel);
+            const requestedLength = duration * beatLength;
+            for (const note of event.notes) {
+                const { when, velocity } = humanize(
+                    { beat, when: startTime + beat * beatLength, velocity: event.velocity },
+                    { random, loopStart: startTime },
+                );
+                const options = getNoteOptions(getNoteBuffer(player, note), {
+                    velocity,
+                    requestedLength,
+                    sustainedInstrument,
+                });
+                player.play(note, when, options);
+            }
+        }
+    });
+}
+
+// The players for a score: the drum synth and the shipped samples, loaded
+// through soundfont-player (the Soundfont global) into destination.
+export function loadScorePlayers(soundfont, audioContext, score, { sampleUrlBase, destination, logTag }) {
+    return loadTrackPlayers(score.tracks, {
+        createDrums: () => createDrumSynth(audioContext, { destination }),
+        loadSample: async instrument => {
+            const url = new URL(`${instrument}-mp3.js`, sampleUrlBase).href;
+            try {
+                return await soundfont.instrument(audioContext, url, { destination });
+            } catch (error) {
+                console.error(logTag, `Could not load the sample file for ${instrument}`, url, error);
+                throw new Error(`The ${instrument} sample could not be loaded. The extension appears to be installed incompletely; reinstall it.`);
+            }
+        },
+    });
+}
+
 // soundfontUrl: the soundfont-player script; sampleUrlBase: the samples/ folder
 // URL; onStop: called after every stop, to show the idle state.
 export function createPlayback({ soundfontUrl, sampleUrlBase, logTag, onStop }) {
@@ -139,18 +203,7 @@ export function createPlayback({ soundfontUrl, sampleUrlBase, logTag, onStop }) 
             throw new Error('This browser does not support the Web Audio API.');
         }
         audioContext ??= new AudioContextConstructor();
-        if (!masterCompressor) {
-            masterCompressor = audioContext.createDynamicsCompressor();
-            masterCompressor.threshold.value = -16;
-            masterCompressor.knee.value = 12;
-            masterCompressor.ratio.value = 8;
-            masterCompressor.attack.value = 0.003;
-            masterCompressor.release.value = 0.2;
-            const masterGain = audioContext.createGain();
-            masterGain.gain.value = 0.75;
-            masterCompressor.connect(masterGain);
-            masterGain.connect(audioContext.destination);
-        }
+        masterCompressor ??= createMasterChain(audioContext);
         return audioContext.resume();
     }
 
@@ -172,20 +225,7 @@ export function createPlayback({ soundfontUrl, sampleUrlBase, logTag, onStop }) 
         const soundfont = await loadSoundfont();
         // Samples ship with the extension in samples/; there is no network
         // fallback, so a missing file means an incomplete install.
-        return loadTrackPlayers(score.tracks, {
-            createDrums: () => createDrumSynth(audioContext, { destination: masterCompressor }),
-            loadSample: async instrument => {
-                const url = new URL(`${instrument}-mp3.js`, sampleUrlBase).href;
-                try {
-                    return await soundfont.instrument(audioContext, url, {
-                        destination: masterCompressor,
-                    });
-                } catch (error) {
-                    console.error(logTag, `Could not load the sample file for ${instrument}`, url, error);
-                    throw new Error(`The ${instrument} sample could not be loaded. The extension appears to be installed incompletely; reinstall it.`);
-                }
-            },
-        });
+        return loadScorePlayers(soundfont, audioContext, score, { sampleUrlBase, destination: masterCompressor, logTag });
     }
 
     // Loads the samples, then loops the score until stop() or the next play().
@@ -206,34 +246,14 @@ export function createPlayback({ soundfontUrl, sampleUrlBase, logTag, onStop }) 
             }
 
             activePlayers = players;
-            const beatLength = 60 / score.tempo;
-            const loopLength = score.loopBeats * beatLength;
-            const random = createRandom(HUMANIZE_SEED);
+            const loopLength = score.loopBeats * (60 / score.tempo);
+            const random = createHumanizer();
 
             const scheduleLoop = (startTime = audioContext.currentTime + 0.08) => {
                 if (current !== generation) {
                     return;
                 }
-                score.tracks.forEach((track, trackIndex) => {
-                    const player = players[trackIndex];
-                    const sustainedInstrument = SUSTAINED_INSTRUMENTS.has(track.instrument);
-                    for (const event of track.events) {
-                        const { beat, duration } = swingEvent(event.beat, event.duration, score.feel);
-                        const requestedLength = duration * beatLength;
-                        for (const note of event.notes) {
-                            const { when, velocity } = humanize(
-                                { beat, when: startTime + beat * beatLength, velocity: event.velocity },
-                                { random, loopStart: startTime },
-                            );
-                            const options = getNoteOptions(getNoteBuffer(player, note), {
-                                velocity,
-                                requestedLength,
-                                sustainedInstrument,
-                            });
-                            player.play(note, when, options);
-                        }
-                    }
-                });
+                schedulePass(score, players, { startTime, random });
                 const nextStart = startTime + loopLength;
                 timer = setTimeout(
                     () => scheduleLoop(Math.max(nextStart, audioContext.currentTime + 0.08)),
