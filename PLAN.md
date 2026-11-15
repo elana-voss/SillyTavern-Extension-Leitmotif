@@ -111,6 +111,13 @@ Version 0.2.2.
 
 Total 12M Claude tokens; subscription about 0.6M output tokens of Sonnet and Opus; no API money.
 
+Milestone review (Fable 5.2 medium), four findings across the parts, fixed by the 6a agent (same files):
+- Swing decides by duration (`src/timing.mjs:18-21`), so the composer's own short off-beat hat (`composer.mjs:71`, `1.5:closed_hat:.25`) stays straight while pitched eighths swing: drums swing by position, not duration.
+- The composer is not told that playback swings: a written-out dotted shuffle (`composer.mjs:79` example) sits beside swung eighths; the prompt says to write straight eighths when the feel swings, and the example is straight.
+- `<groove_cells>` is named unconditionally (`composer.mjs:74`, `:92`) though `musicBriefToPromptSection` leaves it out when empty: a fallback as `<phrase_plan>` has.
+- The seeded random twice: `tools/music-eval/generate.mjs:38` uses `createRandom` from `src/timing.mjs`.
+- Its fifth point (does the reply limit cover drums?) checked: 6 of the 8 measured replies had drums, the longest (35,114 tokens, 16 bars) among them; no change.
+
 ### 6. Fable's eight judging suggestions built (the owner, 2026-11-15: "build them now, and never publish without my go")
 
 From Fable 5.2 high's blind judgement in 5d (the full report in the scratchpad, `fable4-judge.txt`). Each fix is Fable's prompt fix, built as written; each replaces the older line it contradicts (in `src/composer.mjs` and `src/brief.mjs`), not appended beside it. Estimate 4M Claude.
