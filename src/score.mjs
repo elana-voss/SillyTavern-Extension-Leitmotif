@@ -1,3 +1,7 @@
+// The score: its JSON schema for the composer and parseScore, which repairs a
+// generated score into tracks of timed events (pitched roles plus an optional
+// drums track on a fixed kit) and carries the brief's feel.
+//
 // The complete General MIDI palette: program number per instrument name. The
 // same name is the FluidR3 sample file shipped in samples/ ({name}-mp3.js), so
 // every entry here must have a matching sample in the repository.

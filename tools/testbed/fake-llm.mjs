@@ -16,7 +16,7 @@ const BRIEF = {
     era: 'modern',
     key: 'D minor',
     mode: 'dorian',
-    feel: 'straight',
+    feel: 'swing',
     meter: '4/4',
     tempo: 80,
     energy_curve: ['low', 'rise', 'full', 'fall'],
@@ -46,6 +46,16 @@ const SCORE = {
             events: [
                 { beat: 0, duration: 4, velocity: 90, notes: ['D2'] },
                 { beat: 4, duration: 4, velocity: 90, notes: ['A1'] },
+            ],
+        },
+        {
+            role: 'drums',
+            instrument: 'drum_kit',
+            events: [
+                { beat: 0, duration: 0.5, velocity: 100, notes: ['kick', 'closed_hat'] },
+                { beat: 0.5, duration: 0.5, velocity: 60, notes: ['closed_hat'] },
+                { beat: 1, duration: 0.5, velocity: 90, notes: ['snare', 'closed_hat'] },
+                { beat: 1.5, duration: 0.5, velocity: 60, notes: ['open_hat'] },
             ],
         },
     ],
